@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+*.user
+
+# Environment — NEVER commit real secrets
+.env
+
+# IDE
+.idea/
+.vscode/
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db

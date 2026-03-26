@@ -1,0 +1,35 @@
+{
+  "name": "eventzen-node",
+  "version": "1.0.0",
+  "description": "EventZen — Auth, Attendee & Notification Service",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "node --test src/**/*.test.js",
+    "test:integration": "node --no-warnings --test src/**/*.integration.spec.js"
+  },
+  "dependencies": {
+    "@polar-sh/sdk": "^0.46.6",
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.1",
+    "express-rate-limit": "^7.5.1",
+    "kafkajs": "^2.2.4",
+    "jsonwebtoken": "^9.0.2",
+    "minio": "^8.0.7",
+    "mongoose": "^8.5.1",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.2",
+    "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

@@ -1,0 +1,127 @@
+openapi: 3.0.3
+info:
+  title: EventZen .NET Budget Service API
+  version: 1.0.0
+  description: Budget, expense, and financial report APIs.
+servers:
+  - url: http://localhost:8083
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Service health
+      security: []
+      responses:
+        '200':
+          description: Healthy
+  /api/budget/events/{eventId}:
+    post:
+      summary: Create event budget
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Budget created
+    get:
+      summary: Get budget summary for event
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Budget summary
+    put:
+      summary: Update event budget
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Budget updated
+  /api/budget/events/{eventId}/expenses:
+    post:
+      summary: Add expense to event budget
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Expense created
+    get:
+      summary: List event expenses
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expenses
+  /api/budget/expenses/{id}:
+    put:
+      summary: Update expense
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expense updated
+    delete:
+      summary: Delete expense
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expense deleted
+  /api/reports/events/{eventId}:
+    get:
+      summary: Event financial report
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Financial report
+  /api/reports/vendor/events:
+    get:
+      summary: Vendor overview reports
+      responses:
+        '200':
+          description: Vendor report list
+  /api/reports/admin/events:
+    get:
+      summary: Admin overview reports
+      responses:
+        '200':
+          description: Admin report list
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

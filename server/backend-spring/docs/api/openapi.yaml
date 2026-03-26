@@ -1,0 +1,268 @@
+openapi: 3.0.3
+info:
+  title: EventZen Spring Service API
+  version: 1.0.0
+  description: Events, venues, and schedule management APIs.
+servers:
+  - url: http://localhost:8082
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Service health
+      security: []
+      responses:
+        '200':
+          description: Healthy
+  /api/events:
+    get:
+      summary: List events
+      security: []
+      responses:
+        '200':
+          description: Events page
+    post:
+      summary: Create event (VENDOR or ADMIN)
+      responses:
+        '201':
+          description: Event created
+  /api/events/{id}:
+    get:
+      summary: Get event by id
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Event details
+    put:
+      summary: Update event (owner vendor or admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Updated
+    delete:
+      summary: Cancel event (soft delete)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cancelled
+  /api/events/{id}/submit:
+    post:
+      summary: Submit draft for approval
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Submitted
+  /api/events/{id}/status:
+    patch:
+      summary: Change event status (ADMIN)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Status updated
+  /api/venues:
+    get:
+      summary: List venues
+      security: []
+      responses:
+        '200':
+          description: Venues
+    post:
+      summary: Create venue (ADMIN)
+      responses:
+        '201':
+          description: Venue created
+  /api/venues/{id}:
+    get:
+      summary: Get venue by id
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venue details
+    put:
+      summary: Update venue (ADMIN)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venue updated
+    delete:
+      summary: Delete venue (ADMIN)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Venue deleted
+  /api/venues/{id}/availability:
+    get:
+      summary: Venue availability windows
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Availability
+  /api/venues/{id}/bookings:
+    post:
+      summary: Book venue
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Booking created
+    get:
+      summary: List venue bookings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bookings
+  /api/venues/bookings/{id}:
+    delete:
+      summary: Cancel venue booking
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Booking cancelled
+  /api/schedule/{eventId}:
+    get:
+      summary: List event schedule slots
+      security: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Schedule slots
+    post:
+      summary: Create schedule slot
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Slot created
+  /api/schedule/slot/{slotId}:
+    put:
+      summary: Update schedule slot
+      parameters:
+        - in: path
+          name: slotId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Slot updated
+    delete:
+      summary: Delete schedule slot
+      parameters:
+        - in: path
+          name: slotId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Slot deleted
+  /api/internal/events/{id}/rating:
+    patch:
+      summary: Internal rating patch
+      security:
+        - internalSecret: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Rating updated
+  /api/internal/events/{id}/ownership:
+    get:
+      summary: Internal event ownership lookup
+      security:
+        - internalSecret: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ownership
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalSecret:
+      type: apiKey
+      in: header
+      name: X-Internal-Secret

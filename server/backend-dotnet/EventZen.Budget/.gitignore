@@ -1,0 +1,7 @@
+# Build output
+bin/
+obj/
+*.user
+
+# Environment — NEVER commit real secrets
+.env

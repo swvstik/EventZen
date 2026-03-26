@@ -1,0 +1,281 @@
+{
+  "info": {
+    "name": "EventZen — Auth Module (Module 0)",
+    "description": "Complete test suite for all auth endpoints. Run in order. After request 1 (register), check your email for the OTP then paste it into request 6 (verify-email). Set admin_token manually after promoting a user to ADMIN in MongoDB Atlas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:8081" },
+    { "key": "access_token",  "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "admin_token",   "value": "PASTE_ADMIN_JWT_HERE" },
+    { "key": "test_email",    "value": "testuser@yourdomain.com" },
+    { "key": "test_user_id",  "value": "" }
+  ],
+  "item": [
+    {
+      "name": "🟢 Health Check",
+      "request": { "method": "GET", "url": "{{base_url}}/health" }
+    },
+    {
+      "name": "📧 Registration + OTP Flow",
+      "item": [
+        {
+          "name": "1. POST register — OTP sent to email",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "pm.test('Returns OTP message, not tokens', () => {",
+            "  const json = pm.response.json();",
+            "  pm.expect(json.message).to.include('verification code');",
+            "  pm.expect(json.accessToken).to.be.undefined;",
+            "});"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"{{test_email}}\",\n  \"password\": \"Password123!\"\n}" }
+          }
+        },
+        {
+          "name": "2. POST login BEFORE verifying → 403",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403 — not yet verified', () => pm.response.to.have.status(403));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"Password123!\"\n}" }
+          }
+        },
+        {
+          "name": "3. POST resend-otp",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/resend-otp",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\"\n}" }
+          }
+        },
+        {
+          "name": "4. POST verify-email — wrong OTP → 400",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/verify-email",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"otp\": \"000000\"\n}" }
+          }
+        },
+        {
+          "name": "5. POST verify-email — correct OTP → tokens ✅",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const json = pm.response.json();",
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('accessToken returned', () => pm.expect(json.accessToken).to.be.a('string'));",
+            "pm.test('refreshToken returned', () => pm.expect(json.refreshToken).to.be.a('string'));",
+            "pm.test('user.isEmailVerified is true', () => pm.expect(json.user.isEmailVerified).to.be.true);",
+            "pm.test('no passwordHash in response', () => pm.expect(json.user.passwordHash).to.be.undefined);",
+            "if (json.accessToken)  pm.collectionVariables.set('access_token', json.accessToken);",
+            "if (json.refreshToken) pm.collectionVariables.set('refresh_token', json.refreshToken);",
+            "if (json.user && json.user._id) pm.collectionVariables.set('test_user_id', json.user._id);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/verify-email",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"otp\": \"PASTE_6_DIGIT_CODE_FROM_EMAIL\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔑 Login + Profile",
+      "item": [
+        {
+          "name": "6. POST login → tokens",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const json = pm.response.json();",
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "if (json.accessToken)  pm.collectionVariables.set('access_token', json.accessToken);",
+            "if (json.refreshToken) pm.collectionVariables.set('refresh_token', json.refreshToken);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"Password123!\"\n}" }
+          }
+        },
+        {
+          "name": "7. POST login — wrong password → 401",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401', () => pm.response.to.have.status(401));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"wrongpassword\"\n}" }
+          }
+        },
+        {
+          "name": "8. GET /me → profile",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('No passwordHash', () => pm.expect(pm.response.json().user.passwordHash).to.be.undefined);"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{base_url}}/api/auth/me"
+          }
+        },
+        {
+          "name": "9. GET /me — no token → 401",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401', () => pm.response.to.have.status(401));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{base_url}}/api/auth/me" }
+        },
+        {
+          "name": "10. PUT /me — edit profile",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Name updated', () => pm.expect(pm.response.json().user.name).to.equal('Updated Name'));"
+          ]}}],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/api/auth/me",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"avatarUrl\": \"https://example.com/avatar.jpg\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 Refresh + Logout",
+      "item": [
+        {
+          "name": "11. POST /refresh → new tokens",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const json = pm.response.json();",
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('New accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+            "if (json.accessToken)  pm.collectionVariables.set('access_token', json.accessToken);",
+            "if (json.refreshToken) pm.collectionVariables.set('refresh_token', json.refreshToken);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/refresh",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}" }
+          }
+        },
+        {
+          "name": "12. DELETE /logout → 200",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": "{{base_url}}/api/auth/logout",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}" }
+          }
+        },
+        {
+          "name": "13. POST /refresh after logout → 401 ✅",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401 — token invalidated by logout', () => pm.response.to.have.status(401));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/refresh",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔒 Password Reset",
+      "item": [
+        {
+          "name": "14. POST /forgot-password → always 200",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200 even for fake email', () => pm.response.to.have.status(200));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{test_email}}\"\n}" }
+          }
+        },
+        {
+          "name": "15. POST /reset-password — bad token → 400",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/reset-password",
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"notarealtoken\",\n  \"newPassword\": \"NewPassword456!\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👑 Admin — User Management",
+      "item": [
+        {
+          "name": "16. GET /api/users — USER token → 403",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403', () => pm.response.to.have.status(403));"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{base_url}}/api/users"
+          }
+        },
+        {
+          "name": "17. GET /api/users — ADMIN token → 200",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": "{{base_url}}/api/users?page=0&limit=20"
+          }
+        },
+        {
+          "name": "18. PATCH /api/users/:id/role → ORGANIZER",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": "{{base_url}}/api/users/{{test_user_id}}/role",
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"ORGANIZER\"\n}" }
+          }
+        },
+        {
+          "name": "19. DELETE /api/users/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": "{{base_url}}/api/users/{{test_user_id}}"
+          }
+        }
+      ]
+    }
+  ]
+}

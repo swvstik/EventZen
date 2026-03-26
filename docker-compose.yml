@@ -1,0 +1,266 @@
+# ── EventZen — Full Stack Docker Compose ────────────────────────────────────
+#
+# Start everything:   docker compose up --build
+# Stop everything:    docker compose down
+# Wipe databases:     docker compose down -v   (removes named volumes)
+# Rebuild one service: docker compose up --build node-service
+#
+# Public app entry point: 8080 (Nginx gateway).
+# Database ports are bound to 127.0.0.1 for local tooling only.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Databases ────────────────────────────────────────────────────────────────
+
+  mongo-db:
+    image: mongo:7
+    container_name: eventzen-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGO_HOST_PORT:-27018}:27017"  # local-only (Compass/CLI)
+    volumes:
+      - mongo_data:/data/db  # named volume — data persists between restarts
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mysql-db:
+    image: mysql:8
+    container_name: eventzen-mysql
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"  # local-only, avoids 3306 conflicts
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      eventzen
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - eventzen-network
+    # ⚠️ Spring Boot WILL crash if MySQL isn't ready — this healthcheck prevents that
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  minio:
+    image: minio/minio:latest
+    container_name: eventzen-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - eventzen-network
+
+  kafka:
+    image: redpandadata/redpanda:latest
+    container_name: eventzen-kafka
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --check=false
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+      - --advertise-kafka-addr
+      - INTERNAL://kafka:9092,EXTERNAL://localhost:${KAFKA_HOST_PORT:-9094}
+    ports:
+      - "127.0.0.1:${KAFKA_HOST_PORT:-9094}:9094"
+    volumes:
+      - kafka_data:/var/lib/redpanda/data
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  # ── Backend Services ─────────────────────────────────────────────────────────
+
+  node-service:
+    build:
+      context: ./server/backend-node
+      dockerfile: Dockerfile.node
+    container_name: eventzen-node
+    restart: unless-stopped
+    environment:
+      NODE_ENV:                 production
+      PORT:                     8081
+      MONGO_URI:                mongodb://mongo-db:27017/eventzen_node
+      JWT_SECRET:               ${JWT_SECRET}
+      JWT_ACCESS_EXPIRY:        15m
+      JWT_REFRESH_EXPIRY:       7d
+      SPRING_BASE_URL:          http://spring-service:8082
+      INTERNAL_SERVICE_SECRET:  ${INTERNAL_SERVICE_SECRET}
+      TOKEN_HASH_SECRET:        ${TOKEN_HASH_SECRET:-}
+      COOKIE_SECURE:            ${COOKIE_SECURE:-false}
+      CLIENT_URL:               ${CLIENT_URL:-http://localhost:8080}
+      CORS_ALLOWED_ORIGINS:     ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      TRUST_PROXY:              ${TRUST_PROXY:-1}
+      SMTP_HOST:                ${SMTP_HOST}
+      SMTP_USER:                ${SMTP_USER}
+      SMTP_PASS:                ${SMTP_PASS}
+      POLAR_ACCESS_TOKEN:       ${POLAR_ACCESS_TOKEN:-}
+      POLAR_SERVER:             ${POLAR_SERVER:-sandbox}
+      POLAR_PRODUCT_ID:         ${POLAR_PRODUCT_ID:-}
+      MINIO_ENDPOINT:           ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY:         ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
+      MINIO_SECRET_KEY:         ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      MINIO_BUCKET:             ${MINIO_BUCKET:-eventzen-media}
+      MINIO_PUBLIC_BASE_URL:    ${MINIO_PUBLIC_BASE_URL:-http://localhost:8080/media}
+      KAFKA_ENABLED:             ${KAFKA_ENABLED:-true}
+      KAFKA_BROKERS:             ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_CLIENT_ID:           ${NODE_KAFKA_CLIENT_ID:-eventzen-node}
+      KAFKA_EVENT_LIFECYCLE_TOPIC: ${KAFKA_EVENT_LIFECYCLE_TOPIC:-eventzen.event.lifecycle}
+      KAFKA_REGISTRATION_TOPIC:    ${KAFKA_REGISTRATION_TOPIC:-eventzen.registration.lifecycle}
+      KAFKA_PAYMENT_TOPIC:         ${KAFKA_PAYMENT_TOPIC:-eventzen.payment.lifecycle}
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  spring-service:
+    build:
+      context: ./server/backend-spring
+      dockerfile: Dockerfile.spring
+    container_name: eventzen-spring
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL:              jdbc:mysql://mysql-db:3306/eventzen?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME:         root
+      SPRING_DATASOURCE_PASSWORD:         ${MYSQL_ROOT_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO:      update
+      JWT_SECRET:                         ${JWT_SECRET}
+      INTERNAL_SERVICE_SECRET:            ${INTERNAL_SERVICE_SECRET}
+      NODE_SERVICE_BASE_URL:              http://node-service:8081
+      CORS_ALLOWED_ORIGINS:               ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      KAFKA_ENABLED:                      ${KAFKA_ENABLED:-true}
+      KAFKA_BOOTSTRAP_SERVERS:            ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_EVENT_LIFECYCLE_TOPIC:        ${KAFKA_EVENT_LIFECYCLE_TOPIC:-eventzen.event.lifecycle}
+    # ⚠️ MySQL must pass its healthcheck before Spring Boot starts
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s   # JVM startup takes longer than Node.js
+
+  dotnet-service:
+    build:
+      context: ./server/backend-dotnet
+      dockerfile: Dockerfile.dotnet
+    container_name: eventzen-dotnet
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT:     Production
+      ASPNETCORE_URLS:            http://+:8083
+      MongoDB__ConnectionString:  mongodb://mongo-db:27017
+      MongoDB__DatabaseName:      eventzen_budget
+      JWT__Secret:                ${JWT_SECRET}
+      Spring__BaseUrl:            http://spring-service:8082
+      Spring__InternalSecret:     ${INTERNAL_SERVICE_SECRET}
+      Node__BaseUrl:              http://node-service:8081
+      Node__InternalSecret:       ${INTERNAL_SERVICE_SECRET}
+      Cors__AllowedOrigins:       ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      Kafka__Enabled:             ${KAFKA_ENABLED:-true}
+      Kafka__BootstrapServers:    ${KAFKA_BROKERS:-kafka:9092}
+      Kafka__ClientId:            ${DOTNET_KAFKA_CLIENT_ID:-eventzen-dotnet-budget}
+      Kafka__EventLifecycleTopic: ${KAFKA_EVENT_LIFECYCLE_TOPIC:-eventzen.event.lifecycle}
+      Kafka__PaymentTopic:        ${KAFKA_PAYMENT_TOPIC:-eventzen.payment.lifecycle}
+      Kafka__RegistrationTopic:   ${KAFKA_REGISTRATION_TOPIC:-eventzen.registration.lifecycle}
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Gateway ───────────────────────────────────────────────────────────────────
+
+  nginx-gateway:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile.gateway
+    container_name: eventzen-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"            # THE ONLY port exposed to the outside world
+    depends_on:
+      node-service:
+        condition: service_healthy
+      spring-service:
+        condition: service_healthy
+      dotnet-service:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# ── Named volumes (data persists between `docker compose down` restarts) ───────
+volumes:
+  mongo_data:
+  mysql_data:
+  minio_data:
+  kafka_data:
+
+# ── Internal network (services talk to each other by name, not by IP) ─────────
+networks:
+  eventzen-network:
+    driver: bridge

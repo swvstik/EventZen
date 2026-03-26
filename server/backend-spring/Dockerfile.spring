@@ -1,0 +1,41 @@
+# ── EventZen Spring Boot Service (M1 + M2 + M3) ─────────────────────────────
+#
+# Multi-stage build:
+#   Stage 1 (builder): Maven + JDK compiles the source → produces a .jar
+#   Stage 2 (runtime): Only the JRE (no compiler) runs the .jar
+#
+# Why two stages?
+#   The Maven + JDK image is ~700MB. The JRE runtime image is ~200MB.
+#   We build in the fat image, then copy only the .jar to the slim image.
+#   Final image is ~220MB instead of ~700MB.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /build
+
+# Copy pom.xml first — Docker caches the dependency download layer.
+# Source changes won't re-trigger mvn dependency:go-offline.
+COPY pom.xml ./
+RUN mvn dependency:go-offline -q
+
+# Copy source and build the fat jar (skip tests in Docker build)
+COPY src ./src
+RUN mvn package -DskipTests -q
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM eclipse-temurin:21-jre AS runtime
+WORKDIR /app
+
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Copy only the jar — not the entire build toolchain
+COPY --from=builder /build/target/*.jar app.jar
+
+RUN chown appuser:appgroup app.jar
+USER appuser
+
+EXPOSE 8082
+
+# Spring Boot reads env vars at startup — no .env needed in Docker
+ENTRYPOINT ["java", "-jar", "app.jar"]

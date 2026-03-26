@@ -1,0 +1,50 @@
+# ── EventZen ASP.NET Core Budget Service (M6) ────────────────────────────────
+#
+# Multi-stage build:
+#   Stage 1 (builder): Full .NET SDK restores packages and publishes
+#   Stage 2 (runtime): Slim ASP.NET runtime runs the published output
+#
+# dotenv.net reads .env locally — in Docker we pass real env vars directly,
+# so no .env file is needed (and ignoreExceptions: true means no crash).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Build ────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS builder
+WORKDIR /src
+
+# Restore dependencies first — cached unless .csproj changes
+COPY EventZen.Budget/EventZen.Budget.csproj ./EventZen.Budget/
+RUN dotnet restore EventZen.Budget/EventZen.Budget.csproj
+
+# Copy source and publish a self-contained release build
+COPY EventZen.Budget/ ./EventZen.Budget/
+RUN dotnet publish EventZen.Budget/EventZen.Budget.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+RUN if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*; \
+    elif command -v apk >/dev/null 2>&1; then \
+        apk add --no-cache wget; \
+    fi
+
+RUN if command -v addgroup >/dev/null 2>&1; then \
+        addgroup --system appgroup && adduser --system --ingroup appgroup appuser; \
+    else \
+        groupadd --system appgroup && useradd --system --gid appgroup --create-home appuser; \
+    fi
+
+COPY --from=builder /app/publish .
+
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+ENV ASPNETCORE_URLS=http://+:8083
+EXPOSE 8083
+
+ENTRYPOINT ["dotnet", "EventZen.Budget.dll"]

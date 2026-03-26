@@ -1,0 +1,15 @@
+# Maven
+target/
+*.class
+
+# Environment — NEVER commit real secrets
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

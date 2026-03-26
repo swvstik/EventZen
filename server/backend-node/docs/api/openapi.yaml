@@ -1,0 +1,228 @@
+openapi: 3.0.3
+info:
+  title: EventZen Node Service API
+  version: 1.0.0
+  description: Auth, attendee, notifications, reviews, uploads, payments, and internal APIs.
+servers:
+  - url: http://localhost:8081
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Service health
+      security: []
+      responses:
+        '200':
+          description: Healthy
+  /api/auth/register:
+    post:
+      summary: Register user
+      security: []
+      responses:
+        '201':
+          description: Registered
+  /api/auth/login:
+    post:
+      summary: Login user
+      security: []
+      responses:
+        '200':
+          description: Logged in
+  /api/auth/refresh:
+    post:
+      summary: Refresh access token
+      security: []
+      responses:
+        '200':
+          description: Refreshed
+  /api/auth/me:
+    get:
+      summary: Get current user profile
+      responses:
+        '200':
+          description: Profile
+    put:
+      summary: Update current user profile
+      responses:
+        '200':
+          description: Updated
+  /api/users:
+    get:
+      summary: Admin list users
+      responses:
+        '200':
+          description: Users list
+  /api/users/{id}/role:
+    patch:
+      summary: Admin change user role
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role updated
+  /api/attendees/register:
+    post:
+      summary: Register current user for event tier
+      responses:
+        '201':
+          description: Registration created
+  /api/attendees/my:
+    get:
+      summary: Current user registrations
+      responses:
+        '200':
+          description: Registrations
+  /api/attendees/event/{eventId}:
+    get:
+      summary: Vendor/Admin event attendees
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attendees
+  /api/attendees/checkin:
+    post:
+      summary: Vendor/Admin attendee check-in
+      responses:
+        '200':
+          description: Checked in
+  /api/notifications:
+    get:
+      summary: Current user notifications
+      responses:
+        '200':
+          description: Notifications
+  /api/notifications/unread-count:
+    get:
+      summary: Current user unread notification count
+      responses:
+        '200':
+          description: Count
+  /api/vendor-applications:
+    post:
+      summary: Submit vendor application
+      responses:
+        '201':
+          description: Submitted
+  /api/admin/vendor-applications:
+    get:
+      summary: Admin list vendor applications
+      responses:
+        '200':
+          description: Applications
+  /api/admin/vendor-applications/{id}/status:
+    patch:
+      summary: Admin review vendor application
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reviewed
+  /api/uploads/config:
+    get:
+      summary: Upload configuration
+      security: []
+      responses:
+        '200':
+          description: Upload config
+  /api/uploads/image:
+    post:
+      summary: Upload image to MinIO
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                folder:
+                  type: string
+      responses:
+        '201':
+          description: Uploaded
+  /api/reviews/event/{eventId}:
+    get:
+      summary: Public event reviews
+      security: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reviews
+  /api/reviews:
+    post:
+      summary: Create review
+      responses:
+        '201':
+          description: Created
+  /api/payments/status/{orderId}:
+    get:
+      summary: Get payment status
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment status
+  /api/payments/webhook/polar:
+    post:
+      summary: Polar webhook endpoint
+      security: []
+      responses:
+        '200':
+          description: Webhook handled
+  /api/internal/events/{eventId}/cancel-registrations:
+    post:
+      summary: Internal cancel event registrations
+      security:
+        - internalSecret: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancelled
+  /api/internal/payments/platform-fee-aggregates:
+    post:
+      summary: Internal payment aggregates by event ids
+      security:
+        - internalSecret: []
+      responses:
+        '200':
+          description: Aggregates
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalSecret:
+      type: apiKey
+      in: header
+      name: X-Internal-Secret

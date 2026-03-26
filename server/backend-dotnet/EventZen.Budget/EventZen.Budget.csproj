@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>EventZen.Budget</RootNamespace>
+    <AssemblyName>EventZen.Budget</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- .env file support — reads .env into environment variables on startup -->
+    <!-- Same pattern as Node.js dotenv / Spring Boot .env support           -->
+    <PackageReference Include="dotenv.net" Version="3.2.1" />
+
+    <!-- MongoDB driver — native, no Entity Framework -->
+    <PackageReference Include="MongoDB.Driver" Version="3.1.0" />
+
+    <!-- Kafka client for cross-service asynchronous messaging -->
+    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
+
+    <!-- JWT Bearer authentication -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.4" />
+
+    <!-- FluentValidation — idiomatic .NET validation (better than DataAnnotations) -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+
+    <!-- Swagger/OpenAPI -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
+  </ItemGroup>
+
+</Project>

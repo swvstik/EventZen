@@ -1,0 +1,45 @@
+# ── EventZen Node.js Service (M0 + M4 + M5) ──────────────────────────────────
+#
+# Stage 1: Install dependencies
+# Stage 2: Copy source and run
+#
+# Why node:20-alpine?
+#   alpine = stripped-down Linux, ~5x smaller image than the full node image.
+#   20     = LTS version matching the PRD requirement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: deps ─────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
+
+# Copy package files first — Docker caches this layer.
+# If only source code changes, npm ci is NOT re-run (saves ~30s per build).
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then \
+			npm ci --omit=dev; \
+		else \
+			npm install --omit=dev; \
+		fi
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+# Non-root user — running as root inside a container is a security risk
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy installed node_modules from the deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy source code
+COPY src ./src
+COPY package.json ./
+
+# Own the files
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+EXPOSE 8081
+
+# Use npm start (not npm run dev) — no nodemon in production
+CMD ["node", "src/app.js"]
