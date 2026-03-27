@@ -22,6 +22,24 @@ Without `RUN_KAFKA_INTEGRATION=true`, the broker-dependent integration test is s
 - Swagger UI: `http://localhost:8081/swagger`
 - OpenAPI YAML: `http://localhost:8081/openapi.yaml`
 
+## Compose Auto-Seeding (Test Users)
+
+When using `docker compose up --build` from repository root, users are seeded
+automatically by `user-seed` before Node service starts.
+
+Default credentials:
+
+- `admin@ez.local`
+- `vendor@ez.local`
+- `user@ez.local`
+- password: `Eventzen@2026!` (or `TEST_USER_PASSWORD` if configured)
+
+Manual reseed:
+
+```bash
+docker compose run --rm user-seed
+```
+
 ## Manual API Smoke Checklist
 
 1. Health endpoint:

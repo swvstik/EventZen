@@ -19,6 +19,31 @@ Health check: `GET http://localhost:8081/health`
 Swagger UI: `GET http://localhost:8081/swagger`
 OpenAPI file: `GET http://localhost:8081/openapi.yaml`
 
+## Test User Seeding
+
+When running via Docker Compose from repository root, test users are seeded
+automatically by the one-shot `user-seed` service before `node-service` starts.
+Seeding is idempotent and uses email-based upsert to avoid duplicates.
+
+Default users:
+
+- `admin@ez.local` (ADMIN)
+- `vendor@ez.local` (VENDOR)
+- `user@ez.local` (CUSTOMER)
+- Password: `Eventzen@2026!` (or `TEST_USER_PASSWORD` if set)
+
+Manual run:
+
+```bash
+npm run seed:users
+```
+
+From repo root through Compose:
+
+```bash
+docker compose run --rm user-seed
+```
+
 ## Testing
 
 ```bash

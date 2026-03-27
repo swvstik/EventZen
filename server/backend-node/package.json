@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "seed:users": "node src/scripts/seedUsers.js",
     "test": "node --test src/**/*.test.js",
     "test:integration": "node --no-warnings --test src/**/*.integration.spec.js"
   },

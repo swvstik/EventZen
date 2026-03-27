@@ -81,6 +81,22 @@ docker compose up --build
 This command builds and installs dependencies for all services, including the
 frontend build that is bundled into the Nginx gateway image.
 
+On startup, Compose also runs an idempotent `user-seed` job that upserts default
+test users into MongoDB, so no manual seeding step is required.
+
+Default test users:
+
+- `admin@ez.local` (ADMIN)
+- `vendor@ez.local` (VENDOR)
+- `user@ez.local` (CUSTOMER)
+- Password for all: `Eventzen@2026!` (override with `TEST_USER_PASSWORD`)
+
+If you need to re-run seeding manually:
+
+```bash
+docker compose run --rm user-seed
+```
+
 ### 3. Verify health
 
 ```bash
@@ -100,6 +116,9 @@ Remove containers and volumes:
 ```bash
 docker compose down -v
 ```
+
+`docker compose down -v` removes persisted databases; next startup will seed
+the default users again.
 
 ## Local Development (Without Full Compose)
 

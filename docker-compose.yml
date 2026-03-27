@@ -104,6 +104,23 @@ services:
 
   # ── Backend Services ─────────────────────────────────────────────────────────
 
+  user-seed:
+    build:
+      context: ./server/backend-node
+      dockerfile: Dockerfile.node
+    container_name: eventzen-user-seed
+    restart: "no"
+    command: ["node", "src/scripts/seedUsers.js"]
+    environment:
+      NODE_ENV:            production
+      MONGO_URI:           mongodb://mongo-db:27017/eventzen_node
+      TEST_USER_PASSWORD:  ${TEST_USER_PASSWORD:-Eventzen@2026!}
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
   node-service:
     build:
       context: ./server/backend-node
@@ -142,6 +159,8 @@ services:
       KAFKA_REGISTRATION_TOPIC:    ${KAFKA_REGISTRATION_TOPIC:-eventzen.registration.lifecycle}
       KAFKA_PAYMENT_TOPIC:         ${KAFKA_PAYMENT_TOPIC:-eventzen.payment.lifecycle}
     depends_on:
+      user-seed:
+        condition: service_completed_successfully
       mongo-db:
         condition: service_healthy
       minio:
