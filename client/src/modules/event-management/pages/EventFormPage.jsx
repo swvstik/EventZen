@@ -13,7 +13,7 @@ import TicketTierEditor from '../components/TicketTierEditor';
 import { deleteImageFromMinio, uploadImageToMinio } from '@/shared/api/mediaUpload';
 import useAuthStore from '@/shared/store/authStore';
 import {
-  formatWindowDate,
+  formatWindowDateRange,
   formatWindowTime,
   isWindowOverlapping,
   normalizeEventAvailabilityByVenue,
@@ -248,7 +248,7 @@ export default function EventFormPage() {
   const canEvaluateVenueWindow = Boolean(shouldUseManagedVenue && watchEventDate && watchStartTime && watchEndTime);
 
   const { data: venueAvailabilityById = {} } = useQuery({
-    queryKey: ['venues-availability-bulk', watchEventDate, watchStartTime, watchEndTime, venues.map((v) => v.id).join(',')],
+    queryKey: ['venues-availability-bulk', watchEventDate, watchEndDate, watchStartTime, watchEndTime, venues.map((v) => v.id).join(',')],
     queryFn: async () => {
       try {
         const response = await venuesApi.getAvailabilityBulk(venues.map((venue) => venue.id));
@@ -283,7 +283,9 @@ export default function EventFormPage() {
     : '';
   const selectedVenueWindows = mergedAvailabilityByVenue[String(selectedVenueId)] || [];
   const targetStart = canEvaluateVenueWindow ? toTimestampFromEventWindow(watchEventDate, watchStartTime, '00:00') : null;
-  const targetEnd = canEvaluateVenueWindow ? toTimestampFromEventWindow(watchEventDate, watchEndTime, '23:59') : null;
+  const targetEnd = canEvaluateVenueWindow
+    ? toTimestampFromEventWindow(watchEndDate || watchEventDate, watchEndTime, '23:59')
+    : null;
 
   const selectedVenueConflicts = canEvaluateVenueWindow
     ? selectedVenueWindows.filter((window) => {
@@ -455,7 +457,7 @@ export default function EventFormPage() {
         if (data.eventDate && data.startTime && data.endTime) {
           const venueWindows = mergedAvailabilityByVenue[String(payload.venueId)] || [];
           const requestStart = toTimestampFromEventWindow(data.eventDate, data.startTime, '00:00');
-          const requestEnd = toTimestampFromEventWindow(data.eventDate, data.endTime, '23:59');
+          const requestEnd = toTimestampFromEventWindow(data.endDate || data.eventDate, data.endTime, '23:59');
 
           const hasConflict = venueWindows.some((window) => {
             if (isEdit && String(window.eventId) === String(id)) return false;
@@ -784,6 +786,16 @@ export default function EventFormPage() {
               {errors.eventDate && <p className="text-xs text-neo-red mt-1">{errors.eventDate.message}</p>}
             </div>
             <div>
+              <label className="neo-label" htmlFor="event-start-time">Start Time</label>
+              <TimePicker
+                id="event-start-time"
+                value={watchStartTime}
+                onChange={(val) => setValue('startTime', val || '', { shouldDirty: true, shouldValidate: true })}
+                className="w-full"
+              />
+              {errors.startTime && <p className="text-xs text-neo-red mt-1">{errors.startTime.message}</p>}
+            </div>
+            <div>
               <label className="neo-label" htmlFor="event-end-date">End Date</label>
               <input
                 id="event-end-date"
@@ -794,16 +806,6 @@ export default function EventFormPage() {
                 className="neo-input"
               />
               {errors.endDate && <p className="text-xs text-neo-red mt-1">{errors.endDate.message}</p>}
-            </div>
-            <div>
-              <label className="neo-label" htmlFor="event-start-time">Start Time</label>
-              <TimePicker
-                id="event-start-time"
-                value={watchStartTime}
-                onChange={(val) => setValue('startTime', val || '', { shouldDirty: true, shouldValidate: true })}
-                className="w-full"
-              />
-              {errors.startTime && <p className="text-xs text-neo-red mt-1">{errors.startTime.message}</p>}
             </div>
             <div>
               <label className="neo-label" htmlFor="event-end-time">End Time</label>
@@ -942,7 +944,7 @@ export default function EventFormPage() {
                     {selectedVenueWindows.slice(0, 6).map((window) => (
                       <div key={window.id || `${window.startTime}-${window.endTime}`} className="neo-card neo-card-no-hover neo-retroui-inset p-2">
                         <p className="font-body text-[10px] text-neo-black/70">
-                          {formatWindowDate(window.startTime)} | {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
+                          {formatWindowDateRange(window.startTime, window.endTime)} | {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
                         </p>
                         <p className="font-body text-[10px] text-neo-black/65">{window.eventTitle || `Event #${window.eventId}`}</p>
                         <p className="font-body text-[10px] text-neo-black/55">{toStatusLabel(window.status)}</p>
@@ -961,7 +963,7 @@ export default function EventFormPage() {
                   <div className="mt-2 space-y-1">
                     {selectedVenueConflicts.slice(0, 3).map((window) => (
                       <p key={`conflict-${window.id || `${window.startTime}-${window.endTime}`}`} className="font-body text-[10px] text-neo-red/90">
-                        {window.eventTitle || `Event #${window.eventId}`} | {formatWindowDate(window.startTime)} {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
+                        {window.eventTitle || `Event #${window.eventId}`} | {formatWindowDateRange(window.startTime, window.endTime)} {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
                       </p>
                     ))}
                   </div>

@@ -45,8 +45,10 @@ export function normalizeEventAvailabilityByVenue(events, excludedEventId = null
     if (!venueId) return;
     if (String(event?.status || '').toUpperCase() === 'CANCELLED') return;
 
-    const startTime = toIsoFromEventWindow(event.eventDate, event.startTime, '00:00');
-    const endTime = toIsoFromEventWindow(event.eventDate, event.endTime, '23:59');
+    const startDate = event.eventDate;
+    const endDate = event.endDate || event.eventDate;
+    const startTime = toIsoFromEventWindow(startDate, event.startTime, '00:00');
+    const endTime = toIsoFromEventWindow(endDate, event.endTime, '23:59');
     if (!startTime || !endTime) return;
 
     const startTs = toTimestamp(startTime);
@@ -78,7 +80,7 @@ export function normalizeEventAvailabilityForVenue(events, activeVenueId) {
     .map((event) => ({
       id: `event-${event.id}`,
       startTime: toIsoFromEventWindow(event.eventDate, event.startTime, '00:00'),
-      endTime: toIsoFromEventWindow(event.eventDate, event.endTime, '23:59'),
+      endTime: toIsoFromEventWindow(event.endDate || event.eventDate, event.endTime, '23:59'),
       eventId: event.id,
       eventTitle: event.title || `Event #${event.id}`,
       status: event.status,
@@ -100,6 +102,23 @@ export function formatWindowDate(value) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+export function formatWindowDateRange(startValue, endValue) {
+  const startTs = toTimestamp(startValue);
+  const endTs = toTimestamp(endValue);
+  if (!Number.isFinite(startTs)) return 'Unknown date';
+  if (!Number.isFinite(endTs)) return formatWindowDate(startValue);
+
+  const startDate = new Date(startTs);
+  const endDate = new Date(endTs);
+  const isSameDay = startDate.toDateString() === endDate.toDateString();
+
+  if (isSameDay) {
+    return formatWindowDate(startValue);
+  }
+
+  return `${formatWindowDate(startValue)} - ${formatWindowDate(endValue)}`;
 }
 
 export function formatWindowTime(value) {

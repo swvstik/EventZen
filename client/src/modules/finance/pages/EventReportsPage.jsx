@@ -19,6 +19,7 @@ function normalizeItems(data) {
     remaining: Number(event.remaining || 0),
     percentUsed: Number(event.percentUsed || 0),
     expenseCount: Number(event.expenseCount || 0),
+    ticketRevenue: Number(event.ticketSubtotalCollected || event.ticketRevenue || 0),
   }));
 }
 
@@ -60,6 +61,7 @@ export default function EventReportsPage() {
         percentUsed: 0,
         overspendWarning: false,
         expenseCount: 0,
+        ticketRevenue: 0,
       }));
 
     const merged = catalogEvents.map((event) => ({
@@ -123,7 +125,7 @@ export default function EventReportsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[260px]">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 min-w-[260px]">
                   <div className="neo-card neo-card-no-hover p-2 bg-neo-yellow/20">
                     <p className="font-body text-[10px] uppercase tracking-wider text-neo-black/70">Allocated</p>
                     <p className="font-heading text-xs mt-1">{formatCurrency(event.totalAllocated)}</p>
@@ -135,6 +137,10 @@ export default function EventReportsPage() {
                   <div className="neo-card neo-card-no-hover p-2 bg-neo-green/10">
                     <p className="font-body text-[10px] uppercase tracking-wider text-neo-black/70">Remaining</p>
                     <p className="font-heading text-xs mt-1">{formatCurrency(event.remaining)}</p>
+                  </div>
+                  <div className="neo-card neo-card-no-hover p-2 bg-neo-blue/10">
+                    <p className="font-body text-[10px] uppercase tracking-wider text-neo-black/70">Ticket Revenue</p>
+                    <p className="font-heading text-xs mt-1">{formatCurrency(event.ticketRevenue)}</p>
                   </div>
                 </div>
               </div>

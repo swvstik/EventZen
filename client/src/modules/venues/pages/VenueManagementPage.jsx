@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { eventsApi, venuesApi } from '@/shared/api';
 import { PageHeader, EmptyState, ConfirmDialog } from '@/shared/ui';
 import {
-  formatWindowDate,
+  formatWindowDateRange,
   formatWindowTime,
   normalizeEventAvailabilityForVenue,
   toTimestamp,
@@ -322,7 +322,7 @@ export default function VenueManagementPage() {
                 <p className="font-body text-xs text-neo-black/65">No blocked windows found for this venue yet.</p>
               ) : (
                 mergedAvailability.map((entry) => {
-                  const dateStr = formatWindowDate(entry.startTime);
+                  const dateStr = formatWindowDateRange(entry.startTime, entry.endTime);
                   const startTimeStr = formatWindowTime(entry.startTime);
                   const endTimeStr = formatWindowTime(entry.endTime);
                   const statusLabel = entry.status ? String(entry.status).replace(/_/g, ' ') : 'booked';

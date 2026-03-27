@@ -801,9 +801,11 @@ export default function EventDetailPage() {
                   disabled={selectedTierSoldOutNoWaitlist}
                   className="neo-input"
                 />
-                <p className="font-body text-[10px] text-neo-black/65 mt-1">
-                  Max per person for this tier: {selectedTierMaxPerOrder}.
-                </p>
+                {selectedTier && (
+                  <p className="font-body text-[10px] text-neo-black/65 mt-1">
+                    Max per person for this tier: {selectedTierMaxPerOrder}.
+                  </p>
+                )}
               </div>
 
               {isAuthenticated ? (

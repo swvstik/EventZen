@@ -5,7 +5,7 @@ import { HiLocationMarker } from 'react-icons/hi';
 import { eventsApi, venuesApi } from '@/shared/api';
 import { EmptyState, PageHeader } from '@/shared/ui';
 import {
-  formatWindowDate,
+  formatWindowDateRange,
   formatWindowTime,
   isWindowOverlapping,
   normalizeEventAvailabilityByVenue,
@@ -295,7 +295,7 @@ export default function ViewVenuesPage() {
                     {windows.slice(0, 5).map((window) => (
                       <div key={window.id || `${window.startTime}-${window.endTime}`} className="neo-card p-2">
                         <p className="font-body text-[10px] text-neo-black/70">
-                          {formatWindowDate(window.startTime)} | {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
+                          {formatWindowDateRange(window.startTime, window.endTime)} | {formatWindowTime(window.startTime)} - {formatWindowTime(window.endTime)}
                         </p>
                         <p className="font-body text-[10px] text-neo-black/65">{window.eventTitle || `Event #${window.eventId}`}</p>
                         <p className="font-body text-[10px] text-neo-black/55">{toStatusLabel(window.status)}</p>
