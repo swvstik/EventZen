@@ -94,11 +94,38 @@ class Database {
     }
   }
 
+  async #normalizeReviewIndexes() {
+    const db = mongoose.connection.db;
+    if (!db) return;
+
+    const collections = await db
+      .listCollections({ name: /^reviews$/i }, { nameOnly: true })
+      .toArray();
+
+    if (collections.length === 0) {
+      return;
+    }
+
+    const reviews = db.collection(collections[0].name);
+    const indexes = await reviews.indexes();
+
+    const legacyUniqueUserEventIndex = indexes.find((idx) =>
+      idx?.key?.userId === 1
+      && idx?.key?.eventId === 1
+      && idx?.unique === true
+    );
+
+    if (legacyUniqueUserEventIndex) {
+      await reviews.dropIndex(legacyUniqueUserEventIndex.name);
+    }
+  }
+
   async connect() {
     try {
       await mongoose.connect(this.#uri);
       await this.#normalizeRefreshTokenIndexes();
       await this.#normalizeRegistrationIndexes();
+      await this.#normalizeReviewIndexes();
       console.log(`MongoDB connected: ${mongoose.connection.host}`);
     } catch (err) {
       console.error('MongoDB connection failed:', err.message);

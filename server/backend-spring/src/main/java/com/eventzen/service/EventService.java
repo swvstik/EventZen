@@ -165,7 +165,7 @@ public class EventService {
                     .price(t.getPrice())
                     .currency(t.getCurrency() != null ? t.getCurrency() : "INR")
                     .capacity(t.getCapacity())
-                    .maxPerOrder(t.getMaxPerOrder() != null ? t.getMaxPerOrder() : 10)
+                    .maxPerOrder(normalizeMaxPerOrder(t.getMaxPerOrder()))
                     .description(t.getDescription())
                     .build();
                 event.getTicketTiers().add(tier);
@@ -403,7 +403,7 @@ public class EventService {
             target.setPrice(request.getPrice());
             target.setCurrency(request.getCurrency() != null ? request.getCurrency() : "INR");
             target.setCapacity(request.getCapacity());
-            target.setMaxPerOrder(request.getMaxPerOrder() != null ? request.getMaxPerOrder() : 10);
+            target.setMaxPerOrder(normalizeMaxPerOrder(request.getMaxPerOrder()));
             target.setDescription(request.getDescription());
 
             retained.add(target);
@@ -637,7 +637,7 @@ public class EventService {
         int totalTierCapacity = tiers.stream()
             .mapToInt(t -> {
                 Integer capacity = t.getCapacity();
-                return capacity != null ? capacity.intValue() : 0;
+                return capacity != null ? capacity : 0;
             })
             .sum();
 
@@ -646,5 +646,9 @@ public class EventService {
                 "Total ticket tier capacity (" + totalTierCapacity + ") exceeds venue capacity (" + venue.getCapacity() + ")."
             );
         }
+    }
+
+    private Integer normalizeMaxPerOrder(Integer value) {
+        return value != null ? value : 10;
     }
 }

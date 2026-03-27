@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
+import yaml from 'js-yaml';
 
 import Database from './config/database.js';
 import authRoutes         from './routes/authRoutes.js';
@@ -61,6 +63,20 @@ const db  = new Database(MONGO_URI);
 const app = express();
 let server = null;
 
+const resolveOpenApiPath = () => {
+  const candidates = [
+    path.resolve(process.cwd(), 'docs', 'api', 'openapi.yaml'),
+    path.resolve(process.cwd(), '..', 'docs', 'api', 'openapi.yaml'),
+    path.resolve(process.cwd(), '..', '..', 'docs', 'api', 'openapi.yaml'),
+  ];
+  return candidates.find((candidatePath) => fs.existsSync(candidatePath)) || null;
+};
+
+const openApiPath = resolveOpenApiPath();
+const openApiDocument = openApiPath
+  ? yaml.load(fs.readFileSync(openApiPath, 'utf8'))
+  : null;
+
 // -- Global middleware ---------------------------------------------------------
 app.disable('x-powered-by');
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -83,6 +99,17 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+if (openApiDocument && openApiPath) {
+  app.get('/openapi.yaml', (req, res) => {
+    res.type('application/yaml').sendFile(openApiPath);
+  });
+
+  app.use('/swagger', swaggerUi.serve, swaggerUi.setup(openApiDocument, {
+    explorer: true,
+    customSiteTitle: 'EventZen Node API Docs',
+  }));
+}
 
 // -- Routes --------------------------------------------------------------------
 app.use('/api/auth',          authLimiter, authRoutes);

@@ -3,6 +3,7 @@ package com.eventzen.service;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -41,8 +42,13 @@ public class VendorProfileClientService {
         headers.set("X-Internal-Secret", internalSecret);
 
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
-            Map body = response.getBody();
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            Map<String, Object> body = response.getBody();
             Object dataObj = body != null ? body.get("data") : null;
             if (!(dataObj instanceof Map<?, ?> data)) {
                 return null;

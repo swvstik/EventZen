@@ -82,16 +82,35 @@ function StarRating({ value = 0, onChange, size = 20, interactive = false }) {
   );
 }
 
+function CommentAvatar({ name, avatarUrl }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const initial = String(name || '?').trim().charAt(0) || '?';
+
+  return (
+    <div className="w-7 h-7 bg-neo-blue border-2 border-neo-black flex items-center justify-center font-heading text-[10px] text-white uppercase flex-shrink-0 overflow-hidden">
+      {avatarUrl && !imageFailed ? (
+        <img
+          src={avatarUrl}
+          alt={`${name || 'Reviewer'} avatar`}
+          className="w-full h-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <span>{initial}</span>
+      )}
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const { isAuthenticated, user } = useAuthStore();
   const [selectedTier, setSelectedTier] = useState(null);
   const [quantity, setQuantity] = useState(1);
-  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewRating, setReviewRating] = useState(null);
   const [reviewComment, setReviewComment] = useState('');
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [editingMyReview, setEditingMyReview] = useState(false);
-  const [editReviewRating, setEditReviewRating] = useState(0);
+  const [editingReviewId, setEditingReviewId] = useState(null);
   const [editReviewComment, setEditReviewComment] = useState('');
   const queryClient = useQueryClient();
 
@@ -137,7 +156,7 @@ export default function EventDetailPage() {
   } = useInfiniteQuery({
     queryKey: ['reviews', id],
     queryFn: async ({ pageParam = 0 }) => {
-      const res = await reviewsApi.getByEvent(id, { page: pageParam, limit: 10 });
+      const res = await reviewsApi.getByEvent(id, { page: pageParam, limit: 5 });
       const payload = res?.data || res || {};
       return {
         reviews: payload?.reviews || [],
@@ -152,10 +171,22 @@ export default function EventDetailPage() {
     enabled: !!id,
   });
 
-  const { data: myReviewData } = useQuery({
-    queryKey: ['my-review', id],
-    queryFn: () => reviewsApi.getMine(id).then(r => r.data),
+  const { data: myRatingData } = useQuery({
+    queryKey: ['my-rating', id],
+    queryFn: async () => {
+      const res = await reviewsApi.getMyRating(id);
+      return res?.data?.data || res?.data || null;
+    },
     enabled: isAuthenticated && !!id,
+  });
+
+  const { data: ratingSummaryData } = useQuery({
+    queryKey: ['rating-summary', id],
+    queryFn: async () => {
+      const res = await reviewsApi.getRatingSummary(id);
+      return res?.data?.data || res?.data || { avgRating: 0, count: 0 };
+    },
+    enabled: !!id,
   });
 
   const registerMutation = useMutation({
@@ -201,27 +232,32 @@ export default function EventDetailPage() {
     },
   });
 
-  const reviewMutation = useMutation({
-    mutationFn: (data) => reviewsApi.create(data),
+  const upsertRatingMutation = useMutation({
+    mutationFn: ({ eventId, rating }) => reviewsApi.upsertMyRating(eventId, { rating }),
     onSuccess: () => {
-      toast.success('Review submitted!');
-      setReviewRating(0);
-      setReviewComment('');
-      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
-      queryClient.invalidateQueries({ queryKey: ['my-review', id] });
+      toast.success('Rating saved.');
+      queryClient.invalidateQueries({ queryKey: ['my-rating', id] });
       queryClient.invalidateQueries({ queryKey: ['event', id] });
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Failed to submit review'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to save rating'),
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: (data) => reviewsApi.createComment(data),
+    onSuccess: () => {
+      toast.success('Comment submitted.');
+      setReviewComment('');
+      queryClient.invalidateQueries({ queryKey: ['reviews', id] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to submit comment'),
   });
 
   const updateReviewMutation = useMutation({
     mutationFn: ({ reviewId, data }) => reviewsApi.update(reviewId, data),
     onSuccess: () => {
       toast.success('Review updated.');
-      setEditingMyReview(false);
+      setEditingReviewId(null);
       queryClient.invalidateQueries({ queryKey: ['reviews', id] });
-      queryClient.invalidateQueries({ queryKey: ['my-review', id] });
-      queryClient.invalidateQueries({ queryKey: ['event', id] });
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to update review'),
   });
@@ -231,8 +267,6 @@ export default function EventDetailPage() {
     onSuccess: () => {
       toast.success('Review deleted.');
       queryClient.invalidateQueries({ queryKey: ['reviews', id] });
-      queryClient.invalidateQueries({ queryKey: ['my-review', id] });
-      queryClient.invalidateQueries({ queryKey: ['event', id] });
     },
     onError: () => toast.error('Failed to delete review'),
   });
@@ -288,15 +322,21 @@ export default function EventDetailPage() {
 
   const allReviews = reviewsData?.pages?.flatMap((p) => p.reviews) || [];
   const totalReviewCount = reviewsData?.pages?.[0]?.total || 0;
-  const myReview = myReviewData || null;
+  const totalRatingCount = Number(ratingSummaryData?.count || 0);
   const isAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
   const isVendor = String(user?.role || '').toUpperCase() === 'VENDOR';
+  const currentUserId = String(user?.userId || user?.id || user?._id || '');
   const isVendorOwnEvent = isVendor && String(event?.vendorUserId || '') === String(user?.userId || user?.id || user?._id || '');
   const hasReviewEligibleRegistration = myEventRegistrations.some(
     (r) => r.status === 'REGISTERED' || r.status === 'CHECKED_IN'
   );
-  const canReview = isAuthenticated && (isAdmin || isVendorOwnEvent || hasReviewEligibleRegistration) && !myReview;
+  const canReview = isAuthenticated && (isAdmin || isVendorOwnEvent || hasReviewEligibleRegistration);
   const avgRating = Number(event?.avgRating || 0);
+  const selectedRating = reviewRating ?? (
+    myRatingData?.rating !== undefined && myRatingData?.rating !== null
+      ? Number(myRatingData.rating)
+      : 0
+  );
   const legacyOwnVenueDetails = extractOwnVenueDetails(event?.description);
   const ownVenueName = event?.ownVenueName || legacyOwnVenueDetails.name;
   const ownVenueAddress = event?.ownVenueAddress || legacyOwnVenueDetails.address;
@@ -363,31 +403,35 @@ export default function EventDetailPage() {
     }
   };
 
-  const handleSubmitReview = (e) => {
+  const handleSubmitComment = (e) => {
     e.preventDefault();
-    if (reviewRating < 1) return toast.error('Please select a star rating');
-    reviewMutation.mutate({ eventId: String(event.id), rating: reviewRating, comment: reviewComment });
+    if (!String(reviewComment || '').trim()) return toast.error('Please enter a comment');
+    commentMutation.mutate({ eventId: String(event.id), comment: reviewComment });
   };
 
-  const handleSaveMyReviewUpdate = () => {
-    if (!myReview?._id) return;
-    if (editReviewRating < 1) {
-      toast.error('Please select a star rating');
-      return;
-    }
+  const handleSaveRating = () => {
+    if (selectedRating < 1) return toast.error('Please select a star rating');
+    upsertRatingMutation.mutate({ eventId: String(event.id), rating: selectedRating });
+  };
+
+  const handleSaveReviewUpdate = () => {
+    if (!editingReviewId) return;
     updateReviewMutation.mutate({
-      reviewId: myReview._id,
+      reviewId: editingReviewId,
       data: {
-        rating: editReviewRating,
         comment: editReviewComment,
       },
     });
   };
 
-  const startEditMyReview = () => {
-    setEditReviewRating(Number(myReview?.rating || 0));
-    setEditReviewComment(myReview?.comment || '');
-    setEditingMyReview(true);
+  const startEditReview = (review) => {
+    setEditingReviewId(review?._id || null);
+    setEditReviewComment(review?.comment || '');
+  };
+
+  const cancelEditReview = () => {
+    setEditingReviewId(null);
+    setEditReviewComment('');
   };
 
   return (
@@ -415,7 +459,7 @@ export default function EventDetailPage() {
               {avgRating > 0 && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-neo-black/40 backdrop-blur-sm border border-white/20 text-white font-heading text-xs">
                   <HiStar size={14} style={{ fill: '#FACC15' }} className="text-neo-yellow" />
-                  {avgRating.toFixed(1)} ({totalReviewCount})
+                  {avgRating.toFixed(1)} ({totalRatingCount})
                 </span>
               )}
             </div>
@@ -438,7 +482,7 @@ export default function EventDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main content */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="order-2 lg:order-1 lg:col-span-2 space-y-8">
             {/* Info pills */}
             <div className="flex flex-wrap gap-3">
               {[
@@ -548,99 +592,52 @@ export default function EventDetailPage() {
                 </p>
               )}
 
-              {/* Review form */}
+              {/* Rating + comment forms */}
               {canReview && (
-                <form onSubmit={handleSubmitReview} className="mb-6 p-4 bg-neo-cream border-3 border-neo-black/20 neo-retroui-inset">
-                  <p className="font-heading text-xs uppercase tracking-wider mb-3">Leave a Review</p>
+                <div className="mb-6 space-y-4">
+                  <div className="p-4 bg-neo-cream border-3 border-neo-black/20 neo-retroui-inset">
+                    <p className="font-heading text-xs uppercase tracking-wider mb-3">Your Rating</p>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="font-body text-xs text-neo-black/70">Rate this event:</span>
+                      <StarRating value={selectedRating} onChange={setReviewRating} interactive size={24} />
+                      {selectedRating > 0 && <span className="font-body text-xs text-neo-black/65">{selectedRating}/5</span>}
+                    </div>
+                    {myRatingData?.rating !== undefined && myRatingData?.rating !== null && (
+                      <p className="font-body text-[11px] text-neo-black/65 mb-3">
+                        Saved rating: {Number(myRatingData.rating).toFixed(1)}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveRating}
+                      disabled={upsertRatingMutation.isPending || selectedRating < 1}
+                      className="neo-btn neo-btn-sm bg-neo-yellow disabled:opacity-50"
+                    >
+                      {upsertRatingMutation.isPending ? 'Saving...' : 'Save Rating'}
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSubmitComment} className="p-4 bg-neo-cream border-3 border-neo-black/20 neo-retroui-inset">
+                    <p className="font-heading text-xs uppercase tracking-wider mb-3">Leave a Comment</p>
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="font-body text-xs text-neo-black/70">Your rating:</span>
-                    <StarRating value={reviewRating} onChange={setReviewRating} interactive size={24} />
-                    {reviewRating > 0 && <span className="font-body text-xs text-neo-black/65">{reviewRating}/5</span>}
+                    <span className="font-body text-xs text-neo-black/70">Comments are separate from rating.</span>
                   </div>
                   <textarea
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="Share your experience (optional)..."
+                    placeholder="Share your experience..."
                     maxLength={1000}
                     rows={3}
                     className="neo-input w-full mb-3 resize-none"
                   />
                   <button
                     type="submit"
-                    disabled={reviewMutation.isPending || reviewRating < 1}
+                    disabled={commentMutation.isPending || !String(reviewComment || '').trim()}
                     className="neo-btn neo-btn-sm bg-neo-yellow disabled:opacity-50"
                   >
-                    {reviewMutation.isPending ? 'Submitting...' : 'Submit Review'}
+                    {commentMutation.isPending ? 'Submitting...' : 'Submit Comment'}
                   </button>
-                </form>
-              )}
-
-              {/* My existing review */}
-              {myReview && (
-                <div className="mb-6 p-4 bg-neo-lavender/30 border-3 border-neo-black/20 neo-retroui-inset">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-heading text-xs uppercase tracking-wider">Your Review</span>
-                      <StarRating value={editingMyReview ? editReviewRating : myReview.rating} size={14} onChange={setEditReviewRating} interactive={editingMyReview} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!editingMyReview && (
-                        <button
-                          type="button"
-                          onClick={startEditMyReview}
-                          className="neo-btn neo-btn-sm bg-neo-white"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => deleteReviewMutation.mutate(myReview._id)}
-                        disabled={deleteReviewMutation.isPending}
-                        className="neo-btn neo-btn-sm bg-neo-white text-neo-red"
-                        title="Delete your review"
-                      >
-                        <HiTrash size={12} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {editingMyReview ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={editReviewComment}
-                        onChange={(e) => setEditReviewComment(e.target.value)}
-                        maxLength={1000}
-                        rows={3}
-                        className="neo-input w-full resize-none"
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleSaveMyReviewUpdate}
-                          disabled={updateReviewMutation.isPending}
-                          className="neo-btn neo-btn-sm bg-neo-yellow"
-                        >
-                          {updateReviewMutation.isPending ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingMyReview(false);
-                            setEditReviewRating(Number(myReview?.rating || 0));
-                            setEditReviewComment(myReview?.comment || '');
-                          }}
-                          className="neo-btn neo-btn-sm bg-neo-white"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    myReview.comment && (
-                      <p className="font-body text-xs text-neo-black/80">{myReview.comment}</p>
-                    )
-                  )}
+                  </form>
                 </div>
               )}
 
@@ -650,7 +647,7 @@ export default function EventDetailPage() {
                 </p>
               )}
 
-              {isAuthenticated && !hasReviewEligibleRegistration && !myReview && !isAdmin && !isVendorOwnEvent && (
+              {isAuthenticated && !hasReviewEligibleRegistration && !isAdmin && !isVendorOwnEvent && (
                 <p className="font-body text-xs text-neo-black/65 mb-4">
                   You need a registered or checked-in ticket for this event before you can leave a review.
                 </p>
@@ -668,35 +665,85 @@ export default function EventDetailPage() {
                       animate={{ opacity: 1 }}
                       className="p-3 border-b-2 border-neo-black/10 last:border-b-0 neo-retroui-inset"
                     >
+                      {(() => {
+                        const isOwnReview = isAuthenticated && String(review.userId) === currentUserId;
+                        const isEditingThisReview = editingReviewId === review._id;
+                        const canDeleteThisReview = isOwnReview || isAdmin;
+
+                        return (
+                          <>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 bg-neo-blue border-2 border-neo-black flex items-center justify-center
-                                        font-heading text-[10px] text-white uppercase flex-shrink-0">
-                            {review.userName?.[0] || '?'}
-                          </div>
+                          <CommentAvatar name={review.userName} avatarUrl={review.userAvatarUrl} />
                           <span className="font-heading text-[10px] uppercase tracking-wider">{review.userName}</span>
-                          <StarRating value={review.rating} size={12} />
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <span className="font-body text-[10px] text-neo-black/55">
                             {formatRelative(review.createdAt)}
                           </span>
-                          {isAdmin && String(review.userId) !== String(user?.userId) && (
-                            <button
-                              type="button"
-                              onClick={() => deleteReviewMutation.mutate(review._id)}
-                              disabled={deleteReviewMutation.isPending}
-                              className="neo-btn neo-btn-sm bg-neo-white text-neo-red"
-                              title="Admin delete review"
-                            >
-                              <HiTrash size={12} />
-                            </button>
-                          )}
                         </div>
                       </div>
-                      {review.comment && (
-                        <p className="font-body text-xs text-neo-black/80 ml-9">{review.comment}</p>
+
+                      {isEditingThisReview ? (
+                        <div className="ml-9 space-y-2">
+                          <textarea
+                            value={editReviewComment}
+                            onChange={(e) => setEditReviewComment(e.target.value)}
+                            maxLength={1000}
+                            rows={3}
+                            className="neo-input w-full resize-none"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSaveReviewUpdate}
+                              disabled={updateReviewMutation.isPending}
+                              className="neo-btn neo-btn-sm bg-neo-yellow"
+                            >
+                              {updateReviewMutation.isPending ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditReview}
+                              className="neo-btn neo-btn-sm bg-neo-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="ml-9 flex items-start justify-between gap-2">
+                          <p className="font-body text-xs text-neo-black/80 break-words">
+                            {review.comment || 'No comment provided.'}
+                          </p>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isOwnReview && (
+                              <button
+                                type="button"
+                                onClick={() => startEditReview(review)}
+                                className="neo-btn neo-btn-sm bg-neo-white px-2 py-1 text-[10px]"
+                                title="Edit your review"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDeleteThisReview && (
+                              <button
+                                type="button"
+                                onClick={() => deleteReviewMutation.mutate(review._id)}
+                                disabled={deleteReviewMutation.isPending}
+                                className="neo-btn neo-btn-sm bg-neo-white text-neo-red px-2 py-1"
+                                title={isOwnReview ? 'Delete your review' : 'Admin delete review'}
+                              >
+                                <HiTrash size={11} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
+                          </>
+                        );
+                      })()}
                     </motion.div>
                   ))}
                   {hasMoreReviews && (
@@ -715,8 +762,8 @@ export default function EventDetailPage() {
           </div>
 
           {/* Sidebar - Ticket Tiers */}
-          <div className="space-y-6">
-            <div className="neo-card p-6 sticky top-24">
+          <div className="order-1 lg:order-2 space-y-6">
+            <div className="neo-card p-6 lg:sticky lg:top-24">
               <h2 className="font-heading text-lg uppercase tracking-wider mb-4">
                 <HiTicket className="inline mr-2" />
                 Tickets

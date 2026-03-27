@@ -158,7 +158,7 @@ paths:
           description: Uploaded
   /api/reviews/event/{eventId}:
     get:
-      summary: Public event reviews
+      summary: Public event comments
       security: []
       parameters:
         - in: path
@@ -168,10 +168,77 @@ paths:
             type: string
       responses:
         '200':
-          description: Reviews
+          description: Comments
+  /api/reviews/event/{eventId}/rating/mine:
+    get:
+      summary: Current user rating for event
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current rating
+  /api/reviews/event/{eventId}/rating/summary:
+    get:
+      summary: Public event rating summary (average and unique rater count)
+      security: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rating summary
+  /api/reviews/event/{eventId}/rating:
+    put:
+      summary: Upsert current user rating for event
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating:
+                  type: number
+                  minimum: 1
+                  maximum: 5
+      responses:
+        '200':
+          description: Rating saved
+  /api/reviews/comments:
+    post:
+      summary: Create event comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, comment]
+              properties:
+                eventId:
+                  type: string
+                comment:
+                  type: string
+      responses:
+        '201':
+          description: Comment created
   /api/reviews:
     post:
-      summary: Create review
+      summary: Create rating and/or comment (legacy compatible)
       responses:
         '201':
           description: Created

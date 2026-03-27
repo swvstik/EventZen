@@ -8,8 +8,6 @@
 **/obj/
 client/dist/
 
-.github/
-
 .idea/
 .vscode/
 *.iml
