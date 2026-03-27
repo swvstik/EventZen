@@ -1,4 +1,5 @@
 using EventZen.Budget.Models;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace EventZen.Budget.Infrastructure.Persistence;
@@ -54,6 +55,25 @@ public class MongoDbContext
             new CreateIndexModel<Expense>(
                 Builders<Expense>.IndexKeys.Ascending(e => e.BudgetId),
                 new CreateIndexOptions { Name = "idx_budgetId" }
+            )
+        );
+
+        // Unique allocation key for auto-generated venue expenses.
+        await Expenses.Indexes.CreateOneAsync(
+            new CreateIndexModel<Expense>(
+                Builders<Expense>.IndexKeys
+                    .Ascending(e => e.BudgetId)
+                    .Ascending(e => e.Category)
+                    .Ascending(e => e.SourceBookingId),
+                new CreateIndexOptions<Expense>
+                {
+                    Name = "uq_budget_category_sourceBooking",
+                    Unique = true,
+                    PartialFilterExpression = Builders<Expense>.Filter.And(
+                        Builders<Expense>.Filter.Exists(e => e.SourceBookingId, true),
+                        Builders<Expense>.Filter.Type(e => e.SourceBookingId, BsonType.String)
+                    )
+                }
             )
         );
     }

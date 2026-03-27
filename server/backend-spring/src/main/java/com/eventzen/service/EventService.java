@@ -1,9 +1,12 @@
 package com.eventzen.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +28,7 @@ import com.eventzen.dto.response.EventOwnershipResponse;
 import com.eventzen.dto.response.EventResponse;
 import com.eventzen.dto.response.EventSummaryResponse;
 import com.eventzen.dto.response.PagedResponse;
+import com.eventzen.exception.ConflictException;
 import com.eventzen.exception.EventZenException;
 import com.eventzen.model.BookingStatus;
 import com.eventzen.model.Event;
@@ -50,6 +54,7 @@ public class EventService {
     private final EventRepository   eventRepo;
     private final VenueRepository   venueRepo;
     private final VenueBookingRepository bookingRepo;
+    private final VenueBookingEventPublisher venueBookingEventPublisher;
     private final AttendeeClientService attendeeClientService;
     private final NotificationClientService notificationClientService;
     private final VendorProfileClientService vendorProfileClientService;
@@ -211,13 +216,16 @@ public class EventService {
         if (req.getTags()           != null) event.setTags(req.getTags());
         if (req.getAllowWaitlist()  != null) event.setAllowWaitlist(req.getAllowWaitlist());
 
-        if (req.getVenueId() != null) {
-            event.setVenue(resolveVenue(req.getVenueId()));
-            event.setOwnVenueName(null);
-            event.setOwnVenueAddress(null);
-        } else {
-            if (req.getOwnVenueName() != null) event.setOwnVenueName(trimToNull(req.getOwnVenueName()));
-            if (req.getOwnVenueAddress() != null) event.setOwnVenueAddress(trimToNull(req.getOwnVenueAddress()));
+        if (req.getVenueId() != null || req.getOwnVenueName() != null || req.getOwnVenueAddress() != null) {
+            if (req.getVenueId() != null) {
+                event.setVenue(resolveVenue(req.getVenueId()));
+                event.setOwnVenueName(null);
+                event.setOwnVenueAddress(null);
+            } else {
+                event.setVenue(null);
+                event.setOwnVenueName(trimToNull(req.getOwnVenueName()));
+                event.setOwnVenueAddress(trimToNull(req.getOwnVenueAddress()));
+            }
         }
 
         Venue targetVenue = event.getVenue();
@@ -242,7 +250,9 @@ public class EventService {
             mergeTicketTiers(event, req.getTicketTiers());
         }
 
-        return new EventResponse(eventRepo.save(event));
+        Event saved = eventRepo.save(event);
+        syncPublishedVenueBooking(saved);
+        return new EventResponse(saved);
     }
 
     private static String trimToNull(String value) {
@@ -264,7 +274,8 @@ public class EventService {
         }
 
         event.setStatus(EventStatus.CANCELLED);
-        eventRepo.save(event);
+        Event saved = eventRepo.save(event);
+        syncPublishedVenueBooking(saved);
 
         boolean synced = attendeeClientService.cancelRegistrationsForEvent(event.getId());
         if (!synced) {
@@ -314,7 +325,9 @@ public class EventService {
             notificationClientService.notifyEventStatusDecision(saved, newStatus);
         }
         if (newStatus == EventStatus.PUBLISHED) {
-            autoBookVenueIfPublished(saved);
+            syncPublishedVenueBooking(saved);
+        } else {
+            syncPublishedVenueBooking(saved);
         }
         return new EventResponse(saved);
     }
@@ -509,37 +522,112 @@ public class EventService {
      * Silently skips if booking already exists or conflicts.
      */
     private void autoBookVenueIfPublished(Event event) {
-        if (event.getStatus() != EventStatus.PUBLISHED) return;
-        if (event.getVenue() == null) return;
-        if (event.getEventDate() == null || event.getStartTime() == null || event.getEndTime() == null) return;
+        syncPublishedVenueBooking(event);
+    }
 
-        // Check if a booking already exists for this event + venue
-        long existing = bookingRepo.countByVenueIdAndEventIdAndStatus(
-            event.getVenue().getId(), event.getId(), BookingStatus.CONFIRMED
+    private void syncPublishedVenueBooking(Event event) {
+        List<VenueBooking> confirmed = bookingRepo.findByEventIdAndStatusOrderByCreatedAtDesc(
+            event.getId(), BookingStatus.CONFIRMED
         );
-        if (existing > 0) return;
 
-        try {
-            java.time.LocalDateTime startDt = java.time.LocalDateTime.of(event.getEventDate(), event.getStartTime());
-            java.time.LocalDateTime endDt = java.time.LocalDateTime.of(
-                event.getEndDate() != null ? event.getEndDate() : event.getEventDate(),
-                event.getEndTime()
-            );
+        boolean shouldHaveVenueBooking = event.getStatus() == EventStatus.PUBLISHED
+            && event.getVenue() != null
+            && event.getEventDate() != null
+            && event.getStartTime() != null
+            && event.getEndTime() != null;
 
-            VenueBooking booking = VenueBooking.builder()
-                .venue(event.getVenue())
-                .event(event)
-                .startTime(startDt)
-                .endTime(endDt)
-                .status(BookingStatus.CONFIRMED)
-                .bookedByUserId(event.getVendorUserId())
-                .build();
-
-            bookingRepo.save(booking);
-            log.info("Auto-booked venue {} for published event {}", event.getVenue().getId(), event.getId());
-        } catch (Exception ex) {
-            log.warn("Auto venue booking skipped for event {}: {}", event.getId(), ex.getMessage());
+        if (!shouldHaveVenueBooking) {
+            cancelBookings(confirmed);
+            return;
         }
+
+        LocalDateTime desiredStart = LocalDateTime.of(event.getEventDate(), event.getStartTime());
+        LocalDateTime desiredEnd = LocalDateTime.of(
+            event.getEndDate() != null ? event.getEndDate() : event.getEventDate(),
+            event.getEndTime()
+        );
+
+        VenueBooking matching = null;
+        for (VenueBooking booking : confirmed) {
+            boolean sameVenue = booking.getVenue() != null
+                && booking.getVenue().getId().equals(event.getVenue().getId());
+            boolean sameWindow = desiredStart.equals(booking.getStartTime())
+                && desiredEnd.equals(booking.getEndTime());
+
+            if (sameVenue && sameWindow) {
+                if (matching == null) {
+                    matching = booking;
+                } else {
+                    cancelBooking(booking);
+                }
+            } else {
+                cancelBooking(booking);
+            }
+        }
+
+        if (matching != null) {
+            return;
+        }
+
+        long conflicts = bookingRepo.countConflicting(event.getVenue().getId(), desiredStart, desiredEnd);
+        if (conflicts > 0) {
+            throw new ConflictException(
+                "Selected venue is already booked for the event time window. " +
+                "Choose a different venue or adjust the schedule.");
+        }
+
+        if (event.getVenue().getDailyRate() == null || event.getVenue().getDailyRate().compareTo(BigDecimal.ZERO) <= 0) {
+            throw EventZenException.badRequest("Selected EventZen venue must have a configured daily rent.");
+        }
+
+        int bookingDays = calculateBookingDays(desiredStart, desiredEnd);
+        BigDecimal dailyRate = event.getVenue().getDailyRate().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalCost = dailyRate.multiply(BigDecimal.valueOf(bookingDays)).setScale(2, RoundingMode.HALF_UP);
+        String currency = normalizeCurrencyOrDefault(event.getVenue().getRateCurrency());
+
+        VenueBooking booking = VenueBooking.builder()
+            .venue(event.getVenue())
+            .event(event)
+            .startTime(desiredStart)
+            .endTime(desiredEnd)
+            .status(BookingStatus.CONFIRMED)
+            .bookedByUserId(event.getVendorUserId())
+            .venueDailyRate(dailyRate)
+            .bookingDays(bookingDays)
+            .totalVenueCost(totalCost)
+            .costCurrency(currency)
+            .build();
+
+        VenueBooking saved = bookingRepo.save(booking);
+        venueBookingEventPublisher.publishBookingCreated(saved);
+        log.info("Synced venue booking {} for published event {}", saved.getId(), event.getId());
+    }
+
+    private void cancelBookings(List<VenueBooking> bookings) {
+        for (VenueBooking booking : bookings) {
+            cancelBooking(booking);
+        }
+    }
+
+    private void cancelBooking(VenueBooking booking) {
+        booking.setStatus(BookingStatus.CANCELLED);
+        VenueBooking saved = bookingRepo.save(booking);
+        venueBookingEventPublisher.publishBookingCancelled(saved);
+    }
+
+    private int calculateBookingDays(LocalDateTime start, LocalDateTime end) {
+        long minutes = Duration.between(start, end).toMinutes();
+        if (minutes <= 0) {
+            return 1;
+        }
+        return (int) Math.max(1, (minutes + (24 * 60 - 1)) / (24 * 60));
+    }
+
+    private String normalizeCurrencyOrDefault(String currency) {
+        if (currency == null || currency.isBlank()) {
+            return "INR";
+        }
+        return currency.trim().toUpperCase();
     }
 
     private void assertTicketCapacityWithinVenue(List<? extends TicketTierRequest> tiers, Venue venue) {

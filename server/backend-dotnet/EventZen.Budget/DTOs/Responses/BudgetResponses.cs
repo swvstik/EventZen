@@ -43,7 +43,11 @@ public record ExpenseResponse(
     string?         VendorId,
     DateTime        ExpenseDate,
     string          AddedByUserId,
-    DateTime        CreatedAt
+    DateTime        CreatedAt,
+    bool            IsAutoAllocated,
+    string?         AllocationSource,
+    string?         SourceBookingId,
+    DateTime?       AllocationTimestamp
 );
 
 // -- Financial report -----------------------------------------------------------
@@ -77,4 +81,14 @@ public record FinancialReportListItemResponse(
     decimal  ChargedTotalCollected,
     int      PaidOrderCount,
     int      PaidTicketCount
+);
+
+public record VenueAllocationReconciliationResponse(
+    string EventId,
+    string Status,
+    string Message,
+    bool ExpenseCreated,
+    string? SourceBookingId,
+    decimal? Amount,
+    string? Currency
 );

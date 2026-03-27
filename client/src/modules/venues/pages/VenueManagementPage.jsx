@@ -107,6 +107,8 @@ export default function VenueManagementPage() {
     setValue('name', venue.name);
     setValue('address', venue.address);
     setValue('capacity', venue.capacity);
+    setValue('dailyRate', venue.dailyRate || '');
+    setValue('rateCurrency', venue.rateCurrency || 'INR');
     setValue('description', venue.description);
     setValue('amenities', venue.amenities);
     setShowForm(true);
@@ -128,7 +130,15 @@ export default function VenueManagementPage() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="neo-card p-6 mb-6">
             <h3 className="font-heading text-sm uppercase mb-4">{editingId ? 'Edit Venue' : 'New Venue'}</h3>
-            <form onSubmit={handleSubmit((d) => saveMutation.mutate({ ...d, capacity: Number(d.capacity) }))}
+            <form onSubmit={handleSubmit((d) => {
+              const payload = {
+                ...d,
+                capacity: Number(d.capacity),
+                dailyRate: d.dailyRate ? Number(d.dailyRate) : undefined,
+                rateCurrency: (d.rateCurrency || 'INR').toUpperCase(),
+              };
+              saveMutation.mutate(payload);
+            })}
               className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="neo-label" htmlFor="venue-name">Name</label>
@@ -164,6 +174,35 @@ export default function VenueManagementPage() {
                   placeholder="Full address"
                 />
                 {errors.address && <p className="text-xs text-neo-red mt-1">{errors.address.message}</p>}
+              </div>
+              <div>
+                <label className="neo-label" htmlFor="venue-daily-rate">Rent Per Day</label>
+                <input
+                  id="venue-daily-rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...register('dailyRate', {
+                    min: { value: 0.01, message: 'Daily rate must be greater than 0' },
+                    valueAsNumber: true,
+                  })}
+                  className="neo-input"
+                  placeholder="e.g. 5000"
+                />
+                {errors.dailyRate && <p className="text-xs text-neo-red mt-1">{errors.dailyRate.message}</p>}
+              </div>
+              <div>
+                <label className="neo-label" htmlFor="venue-rate-currency">Currency</label>
+                <input
+                  id="venue-rate-currency"
+                  {...register('rateCurrency', {
+                    pattern: { value: /^[A-Z]{3}$/, message: 'Use 3-letter uppercase code (e.g. INR)' },
+                  })}
+                  className="neo-input"
+                  placeholder="INR"
+                  maxLength={3}
+                />
+                {errors.rateCurrency && <p className="text-xs text-neo-red mt-1">{errors.rateCurrency.message}</p>}
               </div>
               <div className="md:col-span-2">
                 <label className="neo-label" htmlFor="venue-description">Description</label>
@@ -211,6 +250,11 @@ export default function VenueManagementPage() {
                 </div>
               </div>
               {venue.capacity && <span className="neo-badge bg-neo-cream">{venue.capacity} seats</span>}
+              {venue.dailyRate ? (
+                <span className="neo-badge bg-neo-yellow ml-2">
+                  {(venue.rateCurrency || 'INR').toUpperCase()} {Number(venue.dailyRate).toLocaleString()} / day
+                </span>
+              ) : null}
               {venue.amenities && <p className="font-body text-xs text-neo-black/55 mt-2">{venue.amenities}</p>}
             </motion.div>
           ))}
@@ -248,6 +292,14 @@ export default function VenueManagementPage() {
             <div className="neo-card p-3 text-center">
               <p className="font-heading text-[10px] uppercase">Capacity</p>
               <p className="font-heading text-sm">{venueDetails?.capacity || selectedVenue?.capacity || '-'}</p>
+            </div>
+            <div className="neo-card p-3 text-center">
+              <p className="font-heading text-[10px] uppercase">Rent / Day</p>
+              <p className="font-heading text-sm">
+                {(venueDetails?.dailyRate || selectedVenue?.dailyRate)
+                  ? `${(venueDetails?.rateCurrency || selectedVenue?.rateCurrency || 'INR').toUpperCase()} ${Number(venueDetails?.dailyRate || selectedVenue?.dailyRate).toLocaleString()}`
+                  : '-'}
+              </p>
             </div>
             <div className="neo-card p-3 text-center">
               <p className="font-heading text-[10px] uppercase">Bookings</p>

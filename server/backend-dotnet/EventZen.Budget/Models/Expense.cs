@@ -45,4 +45,16 @@ public class Expense
 
     [BsonElement("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [BsonElement("isAutoAllocated")]
+    public bool IsAutoAllocated { get; set; }
+
+    [BsonElement("allocationSource")]
+    public string? AllocationSource { get; set; }
+
+    [BsonElement("sourceBookingId")]
+    public string? SourceBookingId { get; set; }
+
+    [BsonElement("allocationTimestamp")]
+    public DateTime? AllocationTimestamp { get; set; }
 }

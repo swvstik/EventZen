@@ -5,6 +5,7 @@ import { reportsApi } from '@/shared/api';
 import useAuthStore from '@/shared/store/authStore';
 import { PageHeader, ErrorState, StatusBadge } from '@/shared/ui';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { fetchAllEventsForReports } from '@/shared/utils/financeMetrics';
 
 function normalizeItems(data) {
   const events = Array.isArray(data) ? data : (data?.events || []);
@@ -32,7 +33,46 @@ export default function EventReportsPage() {
     refetchInterval: 30000,
   });
 
-  const events = useMemo(() => normalizeItems(data), [data]);
+  const { data: allEventsData = [] } = useQuery({
+    queryKey: ['event-reports-all-events', role],
+    queryFn: fetchAllEventsForReports,
+    refetchInterval: 60000,
+  });
+
+  const events = useMemo(() => {
+    const budgetEvents = normalizeItems(data);
+    const budgetByEventId = new Map(
+      budgetEvents
+        .filter((event) => event.eventId)
+        .map((event) => [String(event.eventId), event])
+    );
+
+    const currentUserId = user?.userId || user?.id || user?._id || null;
+    const catalogEvents = (Array.isArray(allEventsData) ? allEventsData : [])
+      .filter((event) => isAdmin || String(event?.vendorUserId || '') === String(currentUserId || ''))
+      .map((event) => ({
+        eventId: event.id,
+        title: event.title || `Event ${event.id}`,
+        status: event.status || 'UNKNOWN',
+        totalAllocated: 0,
+        totalSpent: 0,
+        remaining: 0,
+        percentUsed: 0,
+        overspendWarning: false,
+        expenseCount: 0,
+      }));
+
+    const merged = catalogEvents.map((event) => ({
+      ...event,
+      ...(budgetByEventId.get(String(event.eventId)) || {}),
+    }));
+
+    const orphanBudgetRows = budgetEvents.filter(
+      (event) => !catalogEvents.some((catalogEvent) => String(catalogEvent.eventId) === String(event.eventId))
+    );
+
+    return [...merged, ...orphanBudgetRows];
+  }, [allEventsData, data, isAdmin, user]);
 
   return (
     <div className="space-y-5">

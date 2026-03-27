@@ -3,6 +3,8 @@ using EventZen.Budget.DTOs.Responses;
 using EventZen.Budget.Infrastructure.Middleware;
 using EventZen.Budget.Models;
 using EventZen.Budget.Repositories;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 
 namespace EventZen.Budget.Services;
@@ -67,6 +69,28 @@ public interface IBudgetService
 
     Task<List<FinancialReportListItemResponse>> GetAdminReportOverviewAsync(
         CancellationToken ct = default);
+
+    Task<VenueAllocationReconciliationResponse> ReconcileVenueAllocationAsync(
+        string eventId,
+        string userId,
+        string role,
+        CancellationToken ct = default);
+
+    Task<bool> TryAutoAllocateVenueExpenseAsync(
+        string eventId,
+        string sourceBookingId,
+        decimal totalVenueCost,
+        decimal venueDailyRate,
+        int bookingDays,
+        string currency,
+        string vendorUserId,
+        DateTime expenseDateUtc,
+        CancellationToken ct = default);
+
+    Task<bool> RemoveAutoAllocatedVenueExpenseAsync(
+        string eventId,
+        string sourceBookingId,
+        CancellationToken ct = default);
 }
 
 public class BudgetService : IBudgetService
@@ -75,17 +99,23 @@ public class BudgetService : IBudgetService
     private readonly IExpenseRepository _expenses;
     private readonly IEventOwnershipService _eventOwnership;
     private readonly IPaymentMetricsService _paymentMetrics;
+    private readonly IVenueBookingAllocationService _venueBookingAllocation;
+    private readonly ILogger<BudgetService> _logger;
 
     public BudgetService(
         IBudgetRepository budgets,
         IExpenseRepository expenses,
         IEventOwnershipService eventOwnership,
-        IPaymentMetricsService paymentMetrics)
+        IPaymentMetricsService paymentMetrics,
+        IVenueBookingAllocationService venueBookingAllocation,
+        ILogger<BudgetService>? logger = null)
     {
         _budgets = budgets;
         _expenses = expenses;
         _eventOwnership = eventOwnership;
         _paymentMetrics = paymentMetrics;
+        _venueBookingAllocation = venueBookingAllocation;
+        _logger = logger ?? NullLogger<BudgetService>.Instance;
     }
 
     // -- Create budget ---------------------------------------------------------
@@ -120,6 +150,7 @@ public class BudgetService : IBudgetService
         try
         {
             var created = await _budgets.CreateAsync(budget, ct);
+            await EnsureVenueAllocationForBudgetAsync(created, ct);
             return MapBudget(created);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
@@ -139,6 +170,7 @@ public class BudgetService : IBudgetService
         AssertVendorOrAdmin(role);
         var budget = await GetBudgetOrThrowAsync(eventId, ct);
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
+        await EnsureVenueAllocationForBudgetAsync(budget, ct);
         var expenses = await _expenses.FindByBudgetIdAsync(budget.Id, ct);
 
         return BuildSummary(budget, expenses);
@@ -211,6 +243,7 @@ public class BudgetService : IBudgetService
         AssertVendorOrAdmin(role);
         var budget = await GetBudgetOrThrowAsync(eventId, ct);
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
+        await EnsureVenueAllocationForBudgetAsync(budget, ct);
         var expenses = await _expenses.FindByBudgetIdAsync(budget.Id, ct);
         return expenses.Select(MapExpense).ToList();
     }
@@ -231,6 +264,9 @@ public class BudgetService : IBudgetService
         var budget = await _budgets.FindByIdAsync(existing.BudgetId, ct)
             ?? throw new NotFoundException($"Budget {existing.BudgetId} not found.");
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
+
+        if (existing.IsAutoAllocated)
+            throw new ForbiddenException("Auto-allocated expenses are system-locked and cannot be edited.");
 
         var updates = new List<UpdateDefinition<Expense>>();
         if (req.Category.HasValue)    updates.Add(Builders<Expense>.Update.Set(e => e.Category,    req.Category.Value));
@@ -262,8 +298,88 @@ public class BudgetService : IBudgetService
             ?? throw new NotFoundException($"Budget {existing.BudgetId} not found.");
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
 
+        if (existing.IsAutoAllocated)
+            throw new ForbiddenException("Auto-allocated expenses are system-locked and cannot be deleted.");
+
         var deleted = await _expenses.DeleteAsync(id, ct);
         if (!deleted) throw new NotFoundException($"Expense {id} not found.");
+    }
+
+    public async Task<bool> TryAutoAllocateVenueExpenseAsync(
+        string eventId,
+        string sourceBookingId,
+        decimal totalVenueCost,
+        decimal venueDailyRate,
+        int bookingDays,
+        string currency,
+        string vendorUserId,
+        DateTime expenseDateUtc,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(sourceBookingId))
+            return false;
+        if (totalVenueCost <= 0)
+            return false;
+
+        var budget = await _budgets.FindByEventIdAsync(eventId, ct);
+        if (budget is null)
+            return false;
+
+        var existing = await _expenses.FindBySourceBookingAsync(budget.Id, sourceBookingId, ct);
+        if (existing is not null)
+            return false;
+
+        var ownerVendorUserId = await ResolveOwnerVendorUserIdAsync(budget, ct);
+        if (!string.IsNullOrWhiteSpace(vendorUserId) && ownerVendorUserId != vendorUserId)
+            return false;
+
+        var normalizedCurrency = string.IsNullOrWhiteSpace(currency)
+            ? budget.Currency
+            : currency.Trim().ToUpperInvariant();
+
+        var created = new Expense
+        {
+            BudgetId = budget.Id,
+            Category = ExpenseCategory.VENUE,
+            Description = $"Auto-allocated venue rent ({bookingDays} day(s) x {venueDailyRate:0.00} {normalizedCurrency})",
+            Amount = totalVenueCost,
+            VendorId = null,
+            ExpenseDate = expenseDateUtc,
+            AddedByUserId = "system:kafka:venue-booking",
+            IsAutoAllocated = true,
+            AllocationSource = "AUTO_VENUE_BOOKING",
+            SourceBookingId = sourceBookingId,
+            AllocationTimestamp = DateTime.UtcNow,
+        };
+
+        try
+        {
+            await _expenses.CreateAsync(created, ct);
+            return true;
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> RemoveAutoAllocatedVenueExpenseAsync(
+        string eventId,
+        string sourceBookingId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) || string.IsNullOrWhiteSpace(sourceBookingId))
+            return false;
+
+        var budget = await _budgets.FindByEventIdAsync(eventId, ct);
+        if (budget is null)
+            return false;
+
+        var existing = await _expenses.FindBySourceBookingAsync(budget.Id, sourceBookingId, ct);
+        if (existing is null || !existing.IsAutoAllocated)
+            return false;
+
+        return await _expenses.DeleteAsync(existing.Id, ct);
     }
 
     // -- Financial report ------------------------------------------------------
@@ -277,6 +393,7 @@ public class BudgetService : IBudgetService
         AssertVendorOrAdmin(role);
         var budget = await GetBudgetOrThrowAsync(eventId, ct);
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
+        await EnsureVenueAllocationForBudgetAsync(budget, ct);
 
         var expenses = await _expenses.FindByBudgetIdAsync(budget.Id, ct);
         var summary = BuildSummary(budget, expenses);
@@ -314,11 +431,138 @@ public class BudgetService : IBudgetService
         return await BuildReportOverviewAsync(budgets, ct);
     }
 
+    public async Task<VenueAllocationReconciliationResponse> ReconcileVenueAllocationAsync(
+        string eventId,
+        string userId,
+        string role,
+        CancellationToken ct = default)
+    {
+        if (!IsAdmin(role))
+            throw new ForbiddenException("Access denied. Requires ADMIN role.");
+
+        var budget = await _budgets.FindByEventIdAsync(eventId, ct);
+        if (budget is null)
+        {
+            return new VenueAllocationReconciliationResponse(
+                EventId: eventId,
+                Status: "MISSING_BUDGET",
+                Message: "No budget exists for this event.",
+                ExpenseCreated: false,
+                SourceBookingId: null,
+                Amount: null,
+                Currency: null);
+        }
+
+        var allocation = await _venueBookingAllocation.TryGetLatestConfirmedAsync(eventId, ct);
+        await PruneStaleAutoAllocatedVenueExpensesAsync(budget.Id, allocation?.VenueBookingId, ct);
+        if (allocation is null)
+        {
+            return new VenueAllocationReconciliationResponse(
+                EventId: eventId,
+                Status: "NO_CONFIRMED_BOOKING",
+                Message: "No confirmed venue booking snapshot was found for this event.",
+                ExpenseCreated: false,
+                SourceBookingId: null,
+                Amount: null,
+                Currency: null);
+        }
+
+        var existing = await _expenses.FindBySourceBookingAsync(budget.Id, allocation.VenueBookingId, ct);
+        if (existing is not null)
+        {
+            return new VenueAllocationReconciliationResponse(
+                EventId: eventId,
+                Status: "ALREADY_ALLOCATED",
+                Message: "Venue allocation already exists for this booking.",
+                ExpenseCreated: false,
+                SourceBookingId: allocation.VenueBookingId,
+                Amount: existing.Amount,
+                Currency: allocation.Currency);
+        }
+
+        var created = await TryAutoAllocateVenueExpenseAsync(
+            eventId: eventId,
+            sourceBookingId: allocation.VenueBookingId,
+            totalVenueCost: allocation.TotalVenueCost,
+            venueDailyRate: allocation.VenueDailyRate,
+            bookingDays: allocation.BookingDays,
+            currency: allocation.Currency,
+            vendorUserId: allocation.VendorUserId,
+            expenseDateUtc: (allocation.BookedAt ?? allocation.StartTime).ToUniversalTime(),
+            ct: ct
+        );
+
+        return new VenueAllocationReconciliationResponse(
+            EventId: eventId,
+            Status: created ? "ALLOCATED" : "SKIPPED",
+            Message: created
+                ? "Venue allocation was successfully created."
+                : "Venue allocation was skipped because an equivalent allocation already exists or constraints did not match.",
+            ExpenseCreated: created,
+            SourceBookingId: allocation.VenueBookingId,
+            Amount: allocation.TotalVenueCost,
+            Currency: allocation.Currency);
+    }
+
     // -- Private helpers -------------------------------------------------------
 
     private async Task<EventBudget> GetBudgetOrThrowAsync(string eventId, CancellationToken ct)
         => await _budgets.FindByEventIdAsync(eventId, ct)
            ?? throw new NotFoundException($"No budget found for event {eventId}.");
+
+    private async Task EnsureVenueAllocationForBudgetAsync(EventBudget budget, CancellationToken ct)
+    {
+        VenueBookingAllocationInfo? allocation;
+        try
+        {
+            allocation = await _venueBookingAllocation.TryGetLatestConfirmedAsync(budget.EventId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to resolve latest confirmed venue booking while ensuring allocation for event {EventId}, budget {BudgetId}.",
+                budget.EventId,
+                budget.Id
+            );
+            return;
+        }
+
+        await PruneStaleAutoAllocatedVenueExpensesAsync(budget.Id, allocation?.VenueBookingId, ct);
+
+        if (allocation is null)
+            return;
+
+        await TryAutoAllocateVenueExpenseAsync(
+            eventId: budget.EventId,
+            sourceBookingId: allocation.VenueBookingId,
+            totalVenueCost: allocation.TotalVenueCost,
+            venueDailyRate: allocation.VenueDailyRate,
+            bookingDays: allocation.BookingDays,
+            currency: allocation.Currency,
+            vendorUserId: allocation.VendorUserId,
+            expenseDateUtc: (allocation.BookedAt ?? allocation.StartTime).ToUniversalTime(),
+            ct: ct
+        );
+    }
+
+    private async Task PruneStaleAutoAllocatedVenueExpensesAsync(
+        string budgetId,
+        string? currentVenueBookingId,
+        CancellationToken ct)
+    {
+        var allExpenses = await _expenses.FindByBudgetIdAsync(budgetId, ct);
+        var stale = allExpenses.Where(e =>
+            e.IsAutoAllocated
+            && e.AllocationSource == "AUTO_VENUE_BOOKING"
+            && (string.IsNullOrWhiteSpace(currentVenueBookingId) || e.SourceBookingId != currentVenueBookingId)
+        );
+
+        foreach (var expense in stale)
+        {
+            await _expenses.DeleteAsync(expense.Id, ct);
+        }
+    }
 
     private static BudgetSummaryResponse BuildSummary(EventBudget budget, List<Expense> expenses)
     {
@@ -457,5 +701,6 @@ public class BudgetService : IBudgetService
 
     private static ExpenseResponse MapExpense(Expense e) => new(
         e.Id, e.BudgetId, e.Category, e.Description,
-        e.Amount, e.VendorId, e.ExpenseDate, e.AddedByUserId, e.CreatedAt);
+        e.Amount, e.VendorId, e.ExpenseDate, e.AddedByUserId, e.CreatedAt,
+        e.IsAutoAllocated, e.AllocationSource, e.SourceBookingId, e.AllocationTimestamp);
 }

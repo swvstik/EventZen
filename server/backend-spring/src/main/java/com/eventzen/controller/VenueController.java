@@ -1,5 +1,21 @@
 package com.eventzen.controller;
 
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.eventzen.dto.request.BookVenueRequest;
 import com.eventzen.dto.request.VenueRequest;
 import com.eventzen.dto.response.ApiResponse;
@@ -7,14 +23,9 @@ import com.eventzen.dto.response.VenueBookingResponse;
 import com.eventzen.dto.response.VenueResponse;
 import com.eventzen.security.AuthenticatedUser;
 import com.eventzen.service.VenueService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/venues")
@@ -50,6 +61,16 @@ public class VenueController {
     @GetMapping("/{id}/availability")
     public ResponseEntity<ApiResponse<List<VenueBookingResponse>>> getAvailability(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(venueService.getAvailability(id)));
+    }
+
+    /**
+     * GET /api/venues/availability/bulk?venueIds=1,2,3
+     * Public. Returns confirmed bookings keyed by venue id.
+     */
+    @GetMapping("/availability/bulk")
+    public ResponseEntity<ApiResponse<Map<Long, List<VenueBookingResponse>>>> getAvailabilityBulk(
+            @RequestParam List<Long> venueIds) {
+        return ResponseEntity.ok(ApiResponse.ok(venueService.getAvailabilityBulk(venueIds)));
     }
 
     /**

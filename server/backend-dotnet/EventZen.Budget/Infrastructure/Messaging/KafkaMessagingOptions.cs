@@ -8,4 +8,5 @@ public class KafkaMessagingOptions
     public string EventLifecycleTopic { get; set; } = "eventzen.event.lifecycle";
     public string PaymentTopic { get; set; } = "eventzen.payment.lifecycle";
     public string RegistrationTopic { get; set; } = "eventzen.registration.lifecycle";
+    public string VenueBookingsTopic { get; set; } = "eventzen.venue.bookings";
 }

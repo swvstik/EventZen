@@ -88,17 +88,18 @@ export default function ViewVenuesPage() {
   const { data: availabilityByVenue = {} } = useQuery({
     queryKey: ['venues-view-availability', venues.map((v) => v.id).join(',')],
     queryFn: async () => {
-      const pairs = await Promise.all(
-        venues.map(async (venue) => {
-          try {
-            const response = await venuesApi.getAvailability(venue.id);
-            return [String(venue.id), Array.isArray(response?.data) ? response.data : []];
-          } catch {
-            return [String(venue.id), []];
-          }
-        })
-      );
-      return Object.fromEntries(pairs);
+      try {
+        const response = await venuesApi.getAvailabilityBulk(venues.map((venue) => venue.id));
+        const payload = response?.data && typeof response.data === 'object' ? response.data : {};
+        return Object.fromEntries(
+          venues.map((venue) => {
+            const windows = payload[String(venue.id)] ?? payload[venue.id] ?? [];
+            return [String(venue.id), Array.isArray(windows) ? windows : []];
+          })
+        );
+      } catch {
+        return Object.fromEntries(venues.map((venue) => [String(venue.id), []]));
+      }
     },
     enabled: venues.length > 0,
   });
@@ -271,6 +272,9 @@ export default function ViewVenuesPage() {
 
               <p className="font-body text-xs text-neo-black/70">{venue.address || 'Address not provided'}</p>
               <p className="font-body text-xs text-neo-black/65 mt-1">Capacity: {venue.capacity || 'N/A'}</p>
+              <p className="font-body text-xs text-neo-black/65 mt-1">
+                Rent / Day: {venue.dailyRate ? `${(venue.rateCurrency || 'INR').toUpperCase()} ${Number(venue.dailyRate).toLocaleString()}` : 'N/A'}
+              </p>
               {venue.amenities ? <p className="font-body text-xs text-neo-black/65">Amenities: {venue.amenities}</p> : null}
 
               <a

@@ -17,6 +17,7 @@ class EventServiceDraftVisibilityTest {
         null,
         null,
         null,
+        null,
         null
     );
 

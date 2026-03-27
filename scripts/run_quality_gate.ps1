@@ -137,7 +137,7 @@ Invoke-Step -Name '.NET tests' -Action {
 }
 
 Invoke-Step -Name 'Client lint' -Action {
-  Invoke-Cmd -FilePath 'npm' -Arguments @('run', 'lint') -WorkingDirectory (Join-Path $repoRoot 'client')
+  Invoke-Cmd -FilePath 'npm' -Arguments @('run', 'lint', '--', '--max-warnings=0') -WorkingDirectory (Join-Path $repoRoot 'client')
 }
 
 Invoke-Step -Name 'Client production build' -Action {

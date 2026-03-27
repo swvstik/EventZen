@@ -250,17 +250,18 @@ export default function EventFormPage() {
   const { data: venueAvailabilityById = {} } = useQuery({
     queryKey: ['venues-availability-bulk', watchEventDate, watchStartTime, watchEndTime, venues.map((v) => v.id).join(',')],
     queryFn: async () => {
-      const entries = await Promise.all(
-        venues.map(async (venue) => {
-          try {
-            const response = await venuesApi.getAvailability(venue.id);
-            return [String(venue.id), Array.isArray(response?.data) ? response.data : []];
-          } catch {
-            return [String(venue.id), []];
-          }
-        })
-      );
-      return Object.fromEntries(entries);
+      try {
+        const response = await venuesApi.getAvailabilityBulk(venues.map((venue) => venue.id));
+        const payload = response?.data && typeof response.data === 'object' ? response.data : {};
+        return Object.fromEntries(
+          venues.map((venue) => {
+            const windows = payload[String(venue.id)] ?? payload[venue.id] ?? [];
+            return [String(venue.id), Array.isArray(windows) ? windows : []];
+          })
+        );
+      } catch {
+        return Object.fromEntries(venues.map((venue) => [String(venue.id), []]));
+      }
     },
     enabled: shouldUseManagedVenue && venues.length > 0 && canEvaluateVenueWindow,
   });
@@ -300,6 +301,7 @@ export default function EventFormPage() {
       .filter((venue) => {
         const blocks = mergedAvailabilityByVenue[String(venue.id)] || [];
         return blocks.some((block) => {
+          if (isEdit && String(block.eventId) === String(id)) return false;
           const blockStart = toTimestamp(block.startTime);
           const blockEnd = toTimestamp(block.endTime);
           return isWindowOverlapping(targetStart, targetEnd, blockStart, blockEnd);
@@ -422,15 +424,20 @@ export default function EventFormPage() {
     mutationFn: async ({ data, intent = 'draft' }) => {
       const managedVenueMode = data.venueMode === 'eventzen';
       const ownVenueMode = data.venueMode === 'own';
+      const onlineVenueMode = data.venueMode === 'online';
       const payload = {
         ...data,
         description: stripOwnVenueDetails(data.description),
         endDate: data.endDate && data.endDate >= data.eventDate ? data.endDate : undefined,
         tags: data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         allowWaitlist: data.allowWaitlist !== false,
-        venueId: managedVenueMode ? (data.venueId || undefined) : undefined,
-        ownVenueName: ownVenueMode ? (String(data.ownVenueName || '').trim() || undefined) : undefined,
-        ownVenueAddress: ownVenueMode ? (String(data.ownVenueAddress || '').trim() || undefined) : undefined,
+        venueId: managedVenueMode ? (data.venueId || undefined) : null,
+        ownVenueName: ownVenueMode
+          ? (String(data.ownVenueName || '').trim() || undefined)
+          : (onlineVenueMode ? '' : undefined),
+        ownVenueAddress: ownVenueMode
+          ? (String(data.ownVenueAddress || '').trim() || undefined)
+          : (onlineVenueMode ? '' : undefined),
       };
       delete payload.venueMode;
 
@@ -917,6 +924,11 @@ export default function EventFormPage() {
               <p className="font-body text-sm mt-2"><strong>Name:</strong> {selectedVenue.name}</p>
               <p className="font-body text-sm"><strong>Address:</strong> {selectedVenue.address || 'N/A'}</p>
               <p className="font-body text-sm"><strong>Capacity:</strong> {selectedVenue.capacity || 'N/A'}</p>
+              <p className="font-body text-sm">
+                <strong>Rent / Day:</strong> {selectedVenue.dailyRate
+                  ? `${(selectedVenue.rateCurrency || 'INR').toUpperCase()} ${Number(selectedVenue.dailyRate).toLocaleString()}`
+                  : 'Not configured'}
+              </p>
               {selectedVenue.amenities && (
                 <p className="font-body text-sm"><strong>Amenities:</strong> {selectedVenue.amenities}</p>
               )}

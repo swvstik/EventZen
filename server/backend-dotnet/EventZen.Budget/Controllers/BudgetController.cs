@@ -172,4 +172,13 @@ public class BudgetController : ControllerBase
         var result = await _budgetService.GetAdminReportOverviewAsync(ct);
         return Ok(ApiResponse<List<FinancialReportListItemResponse>>.Ok(result));
     }
+
+    /// POST /api/reports/admin/events/:eventId/reconcile-venue-allocation
+    [HttpPost("api/reports/admin/events/{eventId}/reconcile-venue-allocation")]
+    public async Task<IActionResult> ReconcileVenueAllocation(string eventId, CancellationToken ct)
+    {
+        AssertAdminOnly();
+        var result = await _budgetService.ReconcileVenueAllocationAsync(eventId, UserId, Role, ct);
+        return Ok(ApiResponse<VenueAllocationReconciliationResponse>.Ok(result));
+    }
 }

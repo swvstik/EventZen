@@ -42,6 +42,9 @@ export const venuesApi = {
   getAll: (params) => httpClient.get('/venues', { params }),
   getById: (id) => httpClient.get(`/venues/${id}`),
   getAvailability: (id) => httpClient.get(`/venues/${id}/availability`),
+  getAvailabilityBulk: (venueIds) => httpClient.get('/venues/availability/bulk', {
+    params: { venueIds: Array.isArray(venueIds) ? venueIds.join(',') : '' },
+  }),
   create: (data) => httpClient.post('/venues', data),
   update: (id, data) => httpClient.put(`/venues/${id}`, data),
   delete: (id) => httpClient.delete(`/venues/${id}`),
@@ -82,6 +85,7 @@ export const reportsApi = {
   getEventReport: (eventId) => httpClient.get(`/reports/events/${eventId}`),
   getVendorOverview: () => httpClient.get('/reports/vendor/events'),
   getAdminOverview: () => httpClient.get('/reports/admin/events'),
+  reconcileVenueAllocation: (eventId) => httpClient.post(`/reports/admin/events/${eventId}/reconcile-venue-allocation`),
 };
 
 export const notificationsApi = {

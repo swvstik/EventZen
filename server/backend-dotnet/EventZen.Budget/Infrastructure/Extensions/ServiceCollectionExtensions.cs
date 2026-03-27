@@ -52,9 +52,11 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.Configure<KafkaMessagingOptions>(configuration.GetSection("Kafka"));
+        services.Configure<VenueAllocationReconciliationOptions>(configuration.GetSection("VenueAllocationReconciliation"));
         services.AddSingleton<KafkaRuntimeState>();
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
         services.AddHostedService<KafkaLifecycleConsumerService>();
+        services.AddHostedService<VenueAllocationReconciliationService>();
         return services;
     }
 
@@ -78,6 +80,32 @@ public static class ServiceCollectionExtensions
             {
                 throw new InvalidOperationException(
                     "Spring:InternalSecret must be configured for internal ownership checks.");
+            }
+
+            client.BaseAddress = parsedBaseUrl;
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Remove("X-Internal-Secret");
+            client.DefaultRequestHeaders.Add("X-Internal-Secret", internalSecret);
+        });
+
+        services.AddHttpClient<IVenueBookingAllocationService, VenueBookingAllocationService>((sp, client) =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var baseUrl = configuration["Spring:BaseUrl"];
+            var internalSecret = configuration["Spring:InternalSecret"];
+
+            if (string.IsNullOrWhiteSpace(baseUrl)
+                || !Uri.TryCreate(baseUrl.TrimEnd('/'), UriKind.Absolute, out var parsedBaseUrl)
+                || (parsedBaseUrl.Scheme != Uri.UriSchemeHttp && parsedBaseUrl.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException(
+                    "Spring:BaseUrl must be configured as a valid absolute HTTP/HTTPS URL.");
+            }
+
+            if (string.IsNullOrWhiteSpace(internalSecret))
+            {
+                throw new InvalidOperationException(
+                    "Spring:InternalSecret must be configured for internal booking checks.");
             }
 
             client.BaseAddress = parsedBaseUrl;

@@ -9,6 +9,7 @@ public interface IExpenseRepository
     Task<List<Expense>> FindByBudgetIdAsync(string budgetId,  CancellationToken ct = default);
     Task<List<Expense>> FindByBudgetIdsAsync(IReadOnlyCollection<string> budgetIds, CancellationToken ct = default);
     Task<Expense?>      FindByIdAsync(string id,              CancellationToken ct = default);
+    Task<Expense?>      FindBySourceBookingAsync(string budgetId, string sourceBookingId, CancellationToken ct = default);
     Task<Expense>       CreateAsync(Expense expense,          CancellationToken ct = default);
     Task<Expense?>      UpdateAsync(string id, UpdateDefinition<Expense> update, CancellationToken ct = default);
     Task<bool>          DeleteAsync(string id,                CancellationToken ct = default);
@@ -39,6 +40,14 @@ public class ExpenseRepository : IExpenseRepository
 
     public async Task<Expense?> FindByIdAsync(string id, CancellationToken ct = default)
         => await _ctx.Expenses.Find(e => e.Id == id).FirstOrDefaultAsync(ct);
+
+    public async Task<Expense?> FindBySourceBookingAsync(
+        string budgetId,
+        string sourceBookingId,
+        CancellationToken ct = default)
+        => await _ctx.Expenses
+            .Find(e => e.BudgetId == budgetId && e.SourceBookingId == sourceBookingId)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<Expense> CreateAsync(Expense expense, CancellationToken ct = default)
     {

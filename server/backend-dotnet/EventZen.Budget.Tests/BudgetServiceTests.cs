@@ -33,7 +33,8 @@ public class BudgetServiceTests
             new FakeBudgetRepository(budget),
             new FakeExpenseRepository(expenses),
             new FakeEventOwnershipService(),
-            new FakePaymentMetricsService());
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
 
         var summary = await service.GetSummaryAsync("event-1", "vendor-1", "VENDOR");
 
@@ -50,7 +51,8 @@ public class BudgetServiceTests
             new FakeBudgetRepository(existingByEventId: null),
             new FakeExpenseRepository(),
             new FakeEventOwnershipService(new EventOwnershipInfo("event-9", "vendor-owner", "Owned Event", "PUBLISHED")),
-            new FakePaymentMetricsService());
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
 
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
             service.CreateBudgetAsync(
@@ -60,6 +62,246 @@ public class BudgetServiceTests
                 role: "VENDOR"));
 
         Assert.Contains("own events", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TryAutoAllocateVenueExpenseAsync_IsIdempotent_BySourceBookingId()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 2000m,
+            Currency = "INR",
+            CreatedByUserId = "vendor-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
+
+        var first = await service.TryAutoAllocateVenueExpenseAsync(
+            eventId: "event-1",
+            sourceBookingId: "booking-1",
+            totalVenueCost: 1500m,
+            venueDailyRate: 500m,
+            bookingDays: 3,
+            currency: "INR",
+            vendorUserId: "vendor-1",
+            expenseDateUtc: DateTime.UtcNow);
+
+        var second = await service.TryAutoAllocateVenueExpenseAsync(
+            eventId: "event-1",
+            sourceBookingId: "booking-1",
+            totalVenueCost: 1500m,
+            venueDailyRate: 500m,
+            bookingDays: 3,
+            currency: "INR",
+            vendorUserId: "vendor-1",
+            expenseDateUtc: DateTime.UtcNow);
+
+        Assert.True(first);
+        Assert.False(second);
+    }
+
+    [Fact]
+    public async Task UpdateExpenseAsync_RejectsAutoAllocatedExpense()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 2000m,
+            Currency = "INR",
+            CreatedByUserId = "vendor-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var autoExpense = new Expense
+        {
+            Id = "e-1",
+            BudgetId = "b-1",
+            Category = ExpenseCategory.VENUE,
+            Description = "Auto expense",
+            Amount = 700m,
+            AddedByUserId = "system:kafka:venue-booking",
+            ExpenseDate = DateTime.UtcNow,
+            IsAutoAllocated = true,
+            AllocationSource = "AUTO_VENUE_BOOKING",
+            SourceBookingId = "booking-1",
+            AllocationTimestamp = DateTime.UtcNow,
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(new List<Expense> { autoExpense }),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
+
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
+            service.UpdateExpenseAsync(
+                id: "e-1",
+                req: new UpdateExpenseRequest(null, "try edit", null, null, null),
+                userId: "vendor-1",
+                role: "VENDOR"));
+    }
+
+    [Fact]
+    public async Task ReconcileVenueAllocationAsync_CreatesExpense_WhenMissing()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 2000m,
+            Currency = "INR",
+            CreatedByUserId = "admin-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService(new VenueBookingAllocationInfo(
+                VenueBookingId: "booking-9",
+                EventId: "event-1",
+                VenueId: "44",
+                VendorUserId: "vendor-1",
+                VenueDailyRate: 500m,
+                BookingDays: 2,
+                TotalVenueCost: 1000m,
+                Currency: "INR",
+                StartTime: DateTime.UtcNow.AddDays(-1),
+                EndTime: DateTime.UtcNow,
+                BookedAt: DateTime.UtcNow.AddDays(-1))));
+
+        var result = await service.ReconcileVenueAllocationAsync("event-1", "admin-1", "ADMIN");
+
+        Assert.Equal("ALLOCATED", result.Status);
+        Assert.True(result.ExpenseCreated);
+        Assert.Equal("booking-9", result.SourceBookingId);
+    }
+
+    [Fact]
+    public async Task ReconcileVenueAllocationAsync_PrunesStaleAutoExpenses_WhenBookingChanges()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 3000m,
+            Currency = "INR",
+            CreatedByUserId = "admin-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var seededExpenses = new List<Expense>
+        {
+            new()
+            {
+                Id = "e-old",
+                BudgetId = "b-1",
+                Category = ExpenseCategory.VENUE,
+                Description = "Old auto venue",
+                Amount = 1000m,
+                AddedByUserId = "system:kafka:venue-booking",
+                ExpenseDate = DateTime.UtcNow.AddDays(-2),
+                IsAutoAllocated = true,
+                AllocationSource = "AUTO_VENUE_BOOKING",
+                SourceBookingId = "booking-old",
+                AllocationTimestamp = DateTime.UtcNow.AddDays(-2),
+            },
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(seededExpenses),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService(new VenueBookingAllocationInfo(
+                VenueBookingId: "booking-new",
+                EventId: "event-1",
+                VenueId: "44",
+                VendorUserId: "vendor-1",
+                VenueDailyRate: 700m,
+                BookingDays: 2,
+                TotalVenueCost: 1400m,
+                Currency: "INR",
+                StartTime: DateTime.UtcNow.AddDays(-1),
+                EndTime: DateTime.UtcNow,
+                BookedAt: DateTime.UtcNow.AddDays(-1))));
+
+        var result = await service.ReconcileVenueAllocationAsync("event-1", "admin-1", "ADMIN");
+
+        Assert.Equal("ALLOCATED", result.Status);
+        Assert.True(result.ExpenseCreated);
+        Assert.Equal("booking-new", result.SourceBookingId);
+        Assert.Single(seededExpenses);
+        Assert.Equal("booking-new", seededExpenses[0].SourceBookingId);
+    }
+
+    [Fact]
+    public async Task ReconcileVenueAllocationAsync_RemovesAutoVenueExpenses_WhenNoConfirmedBooking()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 2000m,
+            Currency = "INR",
+            CreatedByUserId = "admin-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var seededExpenses = new List<Expense>
+        {
+            new()
+            {
+                Id = "e-auto",
+                BudgetId = "b-1",
+                Category = ExpenseCategory.VENUE,
+                Description = "Auto venue",
+                Amount = 900m,
+                AddedByUserId = "system:kafka:venue-booking",
+                ExpenseDate = DateTime.UtcNow.AddDays(-3),
+                IsAutoAllocated = true,
+                AllocationSource = "AUTO_VENUE_BOOKING",
+                SourceBookingId = "booking-z",
+                AllocationTimestamp = DateTime.UtcNow.AddDays(-3),
+            },
+            new()
+            {
+                Id = "e-manual",
+                BudgetId = "b-1",
+                Category = ExpenseCategory.CATERING,
+                Description = "Manual catering",
+                Amount = 300m,
+                AddedByUserId = "vendor-1",
+                ExpenseDate = DateTime.UtcNow.AddDays(-1),
+                IsAutoAllocated = false,
+            },
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(seededExpenses),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService(value: null));
+
+        var result = await service.ReconcileVenueAllocationAsync("event-1", "admin-1", "ADMIN");
+
+        Assert.Equal("NO_CONFIRMED_BOOKING", result.Status);
+        Assert.False(result.ExpenseCreated);
+        Assert.Single(seededExpenses);
+        Assert.Equal("e-manual", seededExpenses[0].Id);
     }
 
     private sealed class FakeBudgetRepository : IBudgetRepository
@@ -116,6 +358,9 @@ public class BudgetServiceTests
         public Task<Expense?> FindByIdAsync(string id, CancellationToken ct = default)
             => Task.FromResult(_seed.FirstOrDefault(e => e.Id == id));
 
+        public Task<Expense?> FindBySourceBookingAsync(string budgetId, string sourceBookingId, CancellationToken ct = default)
+            => Task.FromResult(_seed.FirstOrDefault(e => e.BudgetId == budgetId && e.SourceBookingId == sourceBookingId));
+
         public Task<Expense> CreateAsync(Expense expense, CancellationToken ct = default)
         {
             _seed.Add(expense);
@@ -155,6 +400,23 @@ public class BudgetServiceTests
                 .Distinct(StringComparer.Ordinal)
                 .ToDictionary(id => id, _ => PlatformFeeMetrics.Zero);
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class FakeVenueBookingAllocationService : IVenueBookingAllocationService
+    {
+        private readonly VenueBookingAllocationInfo? _value;
+
+        public FakeVenueBookingAllocationService(VenueBookingAllocationInfo? value = null)
+        {
+            _value = value;
+        }
+
+        public Task<VenueBookingAllocationInfo?> TryGetLatestConfirmedAsync(string eventId, CancellationToken ct = default)
+        {
+            if (_value is null)
+                return Task.FromResult<VenueBookingAllocationInfo?>(null);
+            return Task.FromResult<VenueBookingAllocationInfo?>(_value with { EventId = eventId });
         }
     }
 }

@@ -10,6 +10,7 @@ import { budgetApi, eventsApi, reportsApi } from '@/shared/api';
 import { formatCurrency, formatPercent } from '@/shared/utils/formatters';
 import { EXPENSE_CATEGORIES } from '@/shared/constants/enums';
 import { PageHeader } from '@/shared/ui';
+import useAuthStore from '@/shared/store/authStore';
 
 const CHART_COLORS = ['#FFD600', '#E63946', '#4361EE', '#06D6A0', '#F97316', '#8B5CF6', '#22D3EE', '#A3E635'];
 
@@ -36,6 +37,9 @@ function BudgetBar({ percent, overspend }) {
 
 export default function BudgetPage() {
   const { id: eventId } = useParams();
+  const { user } = useAuthStore();
+  const role = String(user?.role || '').toUpperCase();
+  const isAdmin = role === 'ADMIN';
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [expenseEditDraft, setExpenseEditDraft] = useState({ category: '', description: '', amount: '', expenseDate: '' });
@@ -108,6 +112,18 @@ export default function BudgetPage() {
       queryClient.invalidateQueries({ queryKey: ['report', eventId] });
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to update expense'),
+  });
+
+  const reconcileVenueAllocationMutation = useMutation({
+    mutationFn: () => reportsApi.reconcileVenueAllocation(eventId),
+    onSuccess: (res) => {
+      const payload = res?.data || {};
+      toast.success(payload?.message || payload?.status || 'Reconciliation completed.');
+      queryClient.invalidateQueries({ queryKey: ['expenses', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['budget', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['report', eventId] });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to reconcile venue allocation'),
   });
 
   const summary = budget || report?.summary;
@@ -186,6 +202,23 @@ export default function BudgetPage() {
         action={<button onClick={() => setShowExpenseForm(!showExpenseForm)} className="neo-btn bg-neo-yellow neo-btn-sm">
           <HiPlus /> Add Expense
         </button>} />
+
+      {isAdmin && (
+        <div className="neo-card p-4 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-neo-cream">
+          <div>
+            <p className="font-heading text-xs uppercase tracking-wider">Venue Allocation Reconciliation</p>
+            <p className="font-body text-[11px] text-neo-black/70">Backfills missing auto-allocated EventZen venue rent from latest confirmed venue booking snapshot.</p>
+          </div>
+          <button
+            type="button"
+            className="neo-btn neo-btn-sm bg-neo-white"
+            disabled={reconcileVenueAllocationMutation.isPending}
+            onClick={() => reconcileVenueAllocationMutation.mutate()}
+          >
+            {reconcileVenueAllocationMutation.isPending ? 'Reconciling...' : 'Reconcile Venue Allocation'}
+          </button>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -283,7 +316,7 @@ export default function BudgetPage() {
               {expenseList.map((exp, i) => (
                 <div key={exp._id || exp.id || i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-neo-cream border-2 border-neo-black/10 min-w-0">
                   <div className="min-w-0">
-                    {editingExpenseId === (exp._id || exp.id) ? (
+                    {editingExpenseId === (exp._id || exp.id) && !exp.isAutoAllocated ? (
                       <div className="space-y-2">
                         <select
                           className="neo-select"
@@ -340,7 +373,15 @@ export default function BudgetPage() {
                     ) : (
                       <>
                         <p className="font-heading text-xs uppercase">{exp.description}</p>
-                        <p className="font-body text-[10px] text-neo-black/65">{exp.category?.replace('_', ' ')}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-body text-[10px] text-neo-black/65">{exp.category?.replace('_', ' ')}</p>
+                          {exp.isAutoAllocated && (
+                            <span className="neo-badge bg-neo-blue text-white">SYSTEM-LOCKED</span>
+                          )}
+                          {exp.sourceBookingId && (
+                            <span className="neo-badge bg-neo-white text-neo-black">Booking #{exp.sourceBookingId}</span>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
@@ -350,11 +391,17 @@ export default function BudgetPage() {
                       type="button"
                       onClick={() => startExpenseEdit(exp)}
                       className="neo-btn neo-btn-sm bg-neo-white"
-                      disabled={updateExpenseMutation.isPending}
+                      disabled={updateExpenseMutation.isPending || exp.isAutoAllocated}
                     >
                       Edit
                     </button>
-                    <button onClick={() => deleteExpenseMutation.mutate(exp._id || exp.id)} className="text-neo-red"><HiTrash size={14} /></button>
+                    <button
+                      onClick={() => deleteExpenseMutation.mutate(exp._id || exp.id)}
+                      className={`text-neo-red ${exp.isAutoAllocated ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      disabled={exp.isAutoAllocated}
+                    >
+                      <HiTrash size={14} />
+                    </button>
                   </div>
                 </div>
               ))}

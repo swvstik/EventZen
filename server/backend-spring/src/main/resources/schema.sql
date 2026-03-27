@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS venues (
     contact_name  VARCHAR(100),
     contact_email VARCHAR(255),
     contact_phone VARCHAR(20),
+    daily_rate    DECIMAL(12,2),
+    rate_currency VARCHAR(3),
     INDEX idx_venues_city (city)
 );
 
@@ -88,6 +90,10 @@ CREATE TABLE IF NOT EXISTS venue_bookings (
     end_time           DATETIME    NOT NULL,
     status             ENUM('CONFIRMED','CANCELLED') NOT NULL DEFAULT 'CONFIRMED',
     booked_by_user_id  VARCHAR(50) NOT NULL,
+    venue_daily_rate   DECIMAL(12,2) NOT NULL,
+    booking_days       INT NOT NULL,
+    total_venue_cost   DECIMAL(14,2) NOT NULL,
+    cost_currency      VARCHAR(3) NOT NULL,
     created_at         TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_booking_venue FOREIGN KEY (venue_id) REFERENCES venues(id),

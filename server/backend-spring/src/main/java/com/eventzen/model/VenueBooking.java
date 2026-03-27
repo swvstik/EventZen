@@ -3,6 +3,7 @@ package com.eventzen.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -44,6 +45,18 @@ public class VenueBooking {
     /** Node.js users._id from JWT - who made the booking */
     @Column(name = "booked_by_user_id", nullable = false, length = 50)
     private String bookedByUserId;
+
+    @Column(name = "venue_daily_rate", nullable = false, precision = 12, scale = 2)
+    private BigDecimal venueDailyRate;
+
+    @Column(name = "booking_days", nullable = false)
+    private Integer bookingDays;
+
+    @Column(name = "total_venue_cost", nullable = false, precision = 14, scale = 2)
+    private BigDecimal totalVenueCost;
+
+    @Column(name = "cost_currency", nullable = false, length = 3)
+    private String costCurrency;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

@@ -28,13 +28,11 @@ async function run() {
       .webp({ quality: 82, effort: 5 })
       .toFile(target);
 
-    // eslint-disable-next-line no-console
     console.log(`Generated ${path.relative(ROOT, target)}`);
   }
 }
 
 run().catch((error) => {
-  // eslint-disable-next-line no-console
   console.error('Failed to optimize landing images:', error);
   process.exit(1);
 });
