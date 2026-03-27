@@ -84,7 +84,7 @@ export default function EventReportsPage() {
         action={(
           <Link
             to={isAdmin ? '/admin/reports/admin-overview' : '/admin/reports/vendor-overview'}
-            className="neo-btn neo-btn-sm bg-neo-yellow"
+            className="neo-btn neo-btn-sm bg-neo-yellow w-full sm:w-auto"
           >
             Open Financial Overview
           </Link>
@@ -114,9 +114,9 @@ export default function EventReportsPage() {
           {events.map((event) => (
             <div key={String(event.eventId)} className="neo-card neo-card-no-hover p-4">
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                <div>
-                  <p className="font-heading text-sm uppercase tracking-wider">{event.title}</p>
-                  <div className="mt-2 flex items-center gap-2">
+                <div className="min-w-0">
+                  <p className="font-heading text-sm uppercase tracking-wider break-words">{event.title}</p>
+                  <div className="mt-2 flex flex-wrap items-start gap-2">
                     <StatusBadge status={event.status} />
                     <span className="neo-badge bg-neo-cream">Expenses: {event.expenseCount}</span>
                     <span className={`neo-badge ${event.overspendWarning ? 'bg-neo-red text-white' : 'bg-neo-green text-neo-black'}`}>
@@ -125,7 +125,7 @@ export default function EventReportsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 min-w-[260px]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full">
                   <div className="neo-card neo-card-no-hover p-2 bg-neo-yellow/20">
                     <p className="font-body text-[10px] uppercase tracking-wider text-neo-black/70">Allocated</p>
                     <p className="font-heading text-xs mt-1">{formatCurrency(event.totalAllocated)}</p>
@@ -145,18 +145,18 @@ export default function EventReportsPage() {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2 items-center justify-between">
+              <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 <p className="font-body text-xs text-neo-black/65">
                   Budget usage: {Math.round(event.percentUsed || 0)}%
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <Link to={`/admin/events/${event.eventId}/attendees`} className="neo-btn neo-btn-sm bg-neo-blue text-white">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+                  <Link to={`/admin/events/${event.eventId}/attendees`} className="neo-btn neo-btn-sm bg-neo-blue text-white w-full sm:w-auto text-center">
                     Open Attendees
                   </Link>
-                  <Link to={`/admin/events/${event.eventId}/budget`} className="neo-btn neo-btn-sm bg-neo-white">
+                  <Link to={`/admin/events/${event.eventId}/budget`} className="neo-btn neo-btn-sm bg-neo-white w-full sm:w-auto text-center">
                     Open Budget
                   </Link>
-                  <Link to={`/admin/events/${event.eventId}/edit`} className="neo-btn neo-btn-sm bg-neo-white">
+                  <Link to={`/admin/events/${event.eventId}/edit`} className="neo-btn neo-btn-sm bg-neo-white w-full sm:w-auto text-center">
                     Open Event
                   </Link>
                 </div>

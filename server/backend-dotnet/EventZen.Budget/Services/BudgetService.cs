@@ -622,6 +622,13 @@ public class BudgetService : IBudgetService
     {
         if (budgets.Count == 0) return [];
 
+        // Keep report overview self-healing for venue auto allocations so totals are current
+        // even if the budget detail page was never opened.
+        foreach (var budget in budgets)
+        {
+            await EnsureVenueAllocationForBudgetAsync(budget, ct);
+        }
+
         var budgetIds = budgets.Select(b => b.Id).ToList();
         var allExpenses = await _expenses.FindByBudgetIdsAsync(budgetIds, ct);
         var expensesByBudgetId = allExpenses
