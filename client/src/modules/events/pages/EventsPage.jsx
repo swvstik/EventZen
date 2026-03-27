@@ -6,13 +6,18 @@ import { HiSearch } from 'react-icons/hi';
 import { eventsApi } from '@/shared/api';
 import { EVENT_CATEGORIES, CATEGORY_COLORS } from '@/shared/constants/enums';
 import { formatDate, formatCurrency } from '@/shared/utils/formatters';
+import { withCacheBust } from '@/shared/utils/images';
 import { StatusBadge, SkeletonCard, EmptyState, ErrorState } from '@/shared/ui';
 
-function EventCard({ event, index }) {
+function EventCard({ event, index, refreshToken }) {
   const lowestPrice = event.ticketTiers?.reduce(
     (min, t) => Math.min(min, t.price || 0), Infinity
   );
   const venueLabel = event?.venue?.name || event?.venueName || event?.ownVenueName;
+  const bannerSrc = withCacheBust(
+    event.bannerImageUrl,
+    event?.updatedAt || event?.updatedAtUtc || refreshToken
+  );
 
   return (
     <motion.div
@@ -26,7 +31,7 @@ function EventCard({ event, index }) {
           <div className="relative h-48 overflow-hidden border-b-3 border-neo-black">
             {event.bannerImageUrl ? (
               <img
-                src={event.bannerImageUrl}
+                src={bannerSrc}
                 alt={event.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
@@ -75,9 +80,10 @@ export default function EventsPage() {
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || '');
   const page = parseInt(searchParams.get('page') || '0', 10);
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['events', { q: search, category: selectedCategory, page, status: 'PUBLISHED' }],
     queryFn: () => eventsApi.getAll({ q: search || undefined, category: selectedCategory || undefined, page, limit: 12, status: 'PUBLISHED' }).then(r => r.data),
+    refetchInterval: 30 * 1000,
   });
 
   const events = data?.events || [];
@@ -192,7 +198,7 @@ export default function EventsPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {events.map((event, i) => (
-                <EventCard key={event.id} event={event} index={i} />
+                <EventCard key={event.id} event={event} index={i} refreshToken={dataUpdatedAt} />
               ))}
             </div>
 

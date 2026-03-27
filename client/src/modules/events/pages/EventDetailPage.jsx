@@ -6,6 +6,7 @@ import { HiCalendar, HiLocationMarker, HiClock, HiTicket, HiUsers, HiStar, HiTra
 import toast from 'react-hot-toast';
 import { eventsApi, scheduleApi, attendeesApi, reviewsApi } from '@/shared/api';
 import { formatDate, formatTime, formatCurrency, formatRelative } from '@/shared/utils/formatters';
+import { withCacheBust } from '@/shared/utils/images';
 import { CATEGORY_COLORS } from '@/shared/constants/enums';
 import { StatusBadge, ErrorState, Drawer } from '@/shared/ui';
 import useAuthStore from '@/shared/store/authStore';
@@ -94,27 +95,31 @@ export default function EventDetailPage() {
   const [editReviewComment, setEditReviewComment] = useState('');
   const queryClient = useQueryClient();
 
-  const { data: eventData, isLoading, error } = useQuery({
+  const { data: eventData, isLoading, error, dataUpdatedAt: eventDataUpdatedAt } = useQuery({
     queryKey: ['event', id],
     queryFn: () => eventsApi.getById(id).then(r => r.data),
+    refetchInterval: 30 * 1000,
   });
 
   const { data: scheduleData } = useQuery({
     queryKey: ['schedule', id],
     queryFn: () => scheduleApi.getByEvent(id).then(r => r.data),
     enabled: !eventData?.scheduleSlots?.length,
+    refetchInterval: 30 * 1000,
   });
 
   const { data: countData } = useQuery({
     queryKey: ['event-count', id],
     queryFn: () => attendeesApi.getCount(id).then(r => r.data),
     enabled: !!id,
+    refetchInterval: 30 * 1000,
   });
 
   const { data: waitlistCountData } = useQuery({
     queryKey: ['event-waitlist-count', id],
     queryFn: () => attendeesApi.getWaitlistCount(id).then(r => r.data),
     enabled: !!id,
+    refetchInterval: 30 * 1000,
   });
 
   const { data: myRegsData } = useQuery({
@@ -254,6 +259,10 @@ export default function EventDetailPage() {
   }
 
   const schedule = event?.scheduleSlots?.length ? event.scheduleSlots : (scheduleData || []);
+  const bannerSrc = withCacheBust(
+    event?.bannerImageUrl,
+    event?.updatedAt || event?.updatedAtUtc || eventDataUpdatedAt
+  );
   const tiers = event?.ticketTiers || [];
   const selectedTierConfig = tiers.find((tier) => String(tier.id) === String(selectedTier));
   const selectedTierMaxPerOrder = Math.max(1, Number(selectedTierConfig?.maxPerOrder || 10));
@@ -391,7 +400,7 @@ export default function EventDetailPage() {
           className="relative h-64 md:h-80 mb-8 border-3 border-neo-black shadow-neo-lg overflow-hidden"
         >
           {event.bannerImageUrl ? (
-            <img src={event.bannerImageUrl} alt={event.title}
+            <img src={bannerSrc} alt={event.title}
               className="w-full h-full object-cover" />
           ) : (
             <div className={`w-full h-full ${CATEGORY_COLORS[event.category] || 'bg-neo-lavender'}
