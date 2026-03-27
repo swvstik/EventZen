@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 
 import { ReviewService } from './ReviewService.js';
 
-test('ReviewService allows multiple reviews from same user for same event', async () => {
-  const created = [];
+test('upsertMyRating keeps one rating entry per user/event', async () => {
+  const ratingStore = new Map();
+  let syncCount = 0;
+
   const service = new ReviewService(
     {
-      create: async (payload) => {
-        created.push(payload);
-        return { _id: `review-${created.length}`, ...payload };
+      upsertUserRating: async ({ userId, eventId, rating }) => {
+        const key = `${userId}:${eventId}`;
+        const next = { _id: key, userId, eventId, rating };
+        ratingStore.set(key, next);
+        return next;
       },
     },
     {
@@ -17,31 +21,64 @@ test('ReviewService allows multiple reviews from same user for same event', asyn
     }
   );
 
-  service.syncRatingToSpring = async () => {};
+  service.syncRatingToSpring = async () => {
+    syncCount += 1;
+  };
 
-  const first = await service.createReview({
+  await service.upsertMyRating({
     userId: 'user-1',
     userRole: 'USER',
     userName: 'Alex',
     eventId: 'evt-1',
     rating: 5,
-    comment: 'Great event',
   });
 
-  const second = await service.createReview({
+  await service.upsertMyRating({
     userId: 'user-1',
     userRole: 'USER',
     userName: 'Alex',
     eventId: 'evt-1',
-    rating: 4,
-    comment: 'Updated thoughts',
+    rating: 3,
   });
 
-  assert.equal(first._id, 'review-1');
-  assert.equal(second._id, 'review-2');
+  assert.equal(ratingStore.size, 1);
+  assert.equal(ratingStore.get('user-1:evt-1').rating, 3);
+  assert.equal(syncCount, 2);
+});
+
+test('createComment allows multiple comments per user/event', async () => {
+  const created = [];
+  const service = new ReviewService(
+    {
+      create: async (payload) => {
+        created.push(payload);
+        return { _id: `comment-${created.length}`, ...payload };
+      },
+    },
+    {
+      findByUserId: async () => [{ eventId: 'evt-1', status: 'REGISTERED' }],
+    }
+  );
+
+  const first = await service.createComment({
+    userId: 'user-1',
+    userRole: 'USER',
+    userName: 'Alex',
+    eventId: 'evt-1',
+    comment: 'First comment',
+  });
+
+  const second = await service.createComment({
+    userId: 'user-1',
+    userRole: 'USER',
+    userName: 'Alex',
+    eventId: 'evt-1',
+    comment: 'Second comment',
+  });
+
+  assert.equal(first._id, 'comment-1');
+  assert.equal(second._id, 'comment-2');
   assert.equal(created.length, 2);
-  assert.equal(created[0].eventId, 'evt-1');
-  assert.equal(created[1].eventId, 'evt-1');
 });
 
 test('ReviewService rejects review when attendee is not registered', async () => {
@@ -57,12 +94,11 @@ test('ReviewService rejects review when attendee is not registered', async () =>
   );
 
   await assert.rejects(
-    service.createReview({
+    service.createComment({
       userId: 'user-2',
       userRole: 'USER',
       userName: 'Jamie',
       eventId: 'evt-1',
-      rating: 3,
       comment: 'Not allowed',
     }),
     (err) => {
@@ -71,6 +107,37 @@ test('ReviewService rejects review when attendee is not registered', async () =>
       return true;
     }
   );
+});
+
+test('syncRatingToSpring uses unique-user rating aggregate', async () => {
+  const originalPatch = (await import('axios')).default.patch;
+  const axiosModule = (await import('axios')).default;
+
+  let patchedPayload = null;
+
+  const service = new ReviewService(
+    {
+      calcAvgRatingUniqueUsers: async () => ({ avgRating: 4.25, count: 2 }),
+    },
+    {
+      findByUserId: async () => [],
+    }
+  );
+
+  service.internalSecret = 'internal-secret';
+  service.springBaseUrl = 'http://localhost:8082';
+
+  axiosModule.patch = async (_url, payload) => {
+    patchedPayload = payload;
+    return { data: { success: true } };
+  };
+
+  try {
+    await service.syncRatingToSpring('evt-1');
+    assert.deepEqual(patchedPayload, { avgRating: 4.25 });
+  } finally {
+    axiosModule.patch = originalPatch;
+  }
 });
 
 test('ReviewService lets admin delete another user review', async () => {

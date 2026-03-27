@@ -106,6 +106,17 @@ MINIO_PUBLIC_BASE_URL=http://localhost:8080/media
 | POST | `/api/uploads/image` | JWT |
 | DELETE | `/api/uploads/delete` | JWT |
 
+### Reviews (Rating + Comments)
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/api/reviews/event/:eventId` | None (public comments) |
+| GET | `/api/reviews/event/:eventId/rating/mine` | JWT |
+| PUT | `/api/reviews/event/:eventId/rating` | JWT |
+| POST | `/api/reviews/comments` | JWT |
+| POST | `/api/reviews` | JWT (legacy mixed create) |
+| PUT | `/api/reviews/:id` | JWT (comment update) |
+| DELETE | `/api/reviews/:id` | JWT |
+
 ## Structure
 
 ```

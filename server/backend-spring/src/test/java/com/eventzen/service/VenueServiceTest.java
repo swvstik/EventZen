@@ -1,20 +1,20 @@
 package com.eventzen.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mockito;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.eventzen.dto.request.BookVenueRequest;
 import com.eventzen.dto.response.VenueBookingResponse;
@@ -78,9 +78,10 @@ class VenueServiceTest {
         request.setStartTime(LocalDateTime.of(2026, 3, 10, 9, 0));
         request.setEndTime(LocalDateTime.of(2026, 3, 11, 9, 0));
 
-        assertThrows(ConflictException.class, () -> {
+        ConflictException ex = assertThrows(ConflictException.class, () -> {
             venueService.bookVenue(10L, request, actor);
         });
+        assertNotNull(ex.getMessage());
         Mockito.verify(bookingRepo, Mockito.never()).save(any());
     }
 

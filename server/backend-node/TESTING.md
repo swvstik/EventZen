@@ -33,7 +33,7 @@ Without `RUN_KAFKA_INTEGRATION=true`, the broker-dependent integration test is s
 4. Notification flow:
    - list notifications, unread count, mark one read, mark all read.
 5. Review flow:
-   - create multiple reviews for the same event/user, edit own review, delete own review.
+   - set rating once, update the same rating, add multiple comments, edit/delete own comments.
 6. Payment flow:
    - create payment intent/session (if enabled), confirm callback path, verify event financial aggregate endpoint.
 
@@ -45,6 +45,7 @@ Current automated tests include:
 - Kafka bus and notification event consumer behavior
 - Token lifecycle integration behavior
 - Review service permissions and multi-review acceptance
+- Review service single-rating upsert and multi-comment behavior
 
 Recommended next additions:
 - Integration tests for attendee registration conflict and waitlist transitions

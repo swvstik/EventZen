@@ -112,7 +112,11 @@ export const vendorApplicationsApi = {
 
 export const reviewsApi = {
   getByEvent: (eventId, params) => httpClient.get(`/reviews/event/${eventId}`, { params }),
+  getRatingSummary: (eventId) => httpClient.get(`/reviews/event/${eventId}/rating/summary`),
   getMine: (eventId) => httpClient.get(`/reviews/event/${eventId}/mine`),
+  getMyRating: (eventId) => httpClient.get(`/reviews/event/${eventId}/rating/mine`),
+  upsertMyRating: (eventId, data) => httpClient.put(`/reviews/event/${eventId}/rating`, data),
+  createComment: (data) => httpClient.post('/reviews/comments', data),
   create: (data) => httpClient.post('/reviews', data),
   update: (id, data) => httpClient.put(`/reviews/${id}`, data),
   delete: (id) => httpClient.delete(`/reviews/${id}`),
