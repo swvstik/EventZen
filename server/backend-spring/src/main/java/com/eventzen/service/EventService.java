@@ -437,7 +437,9 @@ public class EventService {
     private void assertCanView(Event event, AuthenticatedUser actor) {
         if (event.getStatus() != EventStatus.DRAFT) return;
 
-        if (actor != null && "VENDOR".equals(actor.getRole()) && event.getVendorUserId().equals(actor.getUserId())) {
+        if (actor != null
+            && ("VENDOR".equals(actor.getRole()) || "ADMIN".equals(actor.getRole()))
+            && event.getVendorUserId().equals(actor.getUserId())) {
             return;
         }
 
@@ -445,7 +447,7 @@ public class EventService {
     }
 
     private String resolveDraftOwnerForVisibility(AuthenticatedUser actor) {
-        if (actor != null && "VENDOR".equals(actor.getRole())) {
+        if (actor != null && ("VENDOR".equals(actor.getRole()) || "ADMIN".equals(actor.getRole()))) {
             return actor.getUserId();
         }
         return null;

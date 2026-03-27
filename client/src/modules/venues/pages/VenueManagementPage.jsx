@@ -193,21 +193,21 @@ export default function VenueManagementPage() {
           {venues.map((venue, i) => (
             <motion.div key={venue.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="neo-card p-6 border-l-8 border-neo-blue">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="font-heading text-sm uppercase tracking-wider">{venue.name}</h3>
-                  <p className="font-body text-xs text-neo-black/65 mt-1">{venue.address}</p>
+              className="neo-card p-4 sm:p-6 border-l-8 border-neo-blue">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="font-heading text-sm uppercase tracking-wider break-words">{venue.name}</h3>
+                  <p className="font-body text-xs text-neo-black/65 mt-1 break-words">{venue.address}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="grid w-full grid-cols-4 gap-2 sm:flex sm:w-auto sm:gap-2">
                   <button
                     onClick={() => setActiveVenueId((current) => (current === venue.id ? null : venue.id))}
-                    className="neo-btn neo-btn-sm bg-neo-white"
+                    className="neo-btn neo-btn-sm bg-neo-white col-span-2 sm:col-auto text-[10px] min-[360px]:text-xs leading-tight"
                   >
                     {activeVenueId === venue.id ? 'Hide Availability' : 'View Availability'}
                   </button>
-                  <button onClick={() => startEdit(venue)} className="neo-btn neo-btn-sm bg-neo-white"><HiPencil size={14} /></button>
-                  <button onClick={() => setDeleteId(venue.id)} className="neo-btn neo-btn-sm bg-neo-white text-neo-red"><HiTrash size={14} /></button>
+                  <button onClick={() => startEdit(venue)} className="neo-btn neo-btn-sm bg-neo-white col-span-1 sm:col-auto justify-center"><HiPencil size={14} /></button>
+                  <button onClick={() => setDeleteId(venue.id)} className="neo-btn neo-btn-sm bg-neo-white text-neo-red col-span-1 sm:col-auto justify-center"><HiTrash size={14} /></button>
                 </div>
               </div>
               {venue.capacity && <span className="neo-badge bg-neo-cream">{venue.capacity} seats</span>}

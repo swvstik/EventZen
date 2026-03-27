@@ -85,13 +85,13 @@ export default function UserManagementPage() {
       </p>
 
       {/* Search bar */}
-      <form onSubmit={handleSearch} className="neo-card neo-card-no-hover neo-toolbar-surface p-4 mb-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+      <form onSubmit={handleSearch} className="neo-card neo-card-no-hover neo-toolbar-surface p-4 mb-4 space-y-3 overflow-hidden">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="min-w-0">
             <h2 className="font-heading text-xs uppercase tracking-wider">Search Users</h2>
             <p className="font-body text-xs text-neo-black/65 mt-1">Name and email search with lazy loading.</p>
           </div>
-          <span className="neo-badge bg-neo-cream">Loaded {totalLoaded}</span>
+          <span className="neo-badge bg-neo-cream self-start sm:self-auto">Loaded {totalLoaded}</span>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -127,7 +127,7 @@ export default function UserManagementPage() {
           {users.map((user, i) => (
             <motion.div key={user._id || user.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.03 }}
-              className="neo-card neo-card-no-hover neo-retroui-panel p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+              className="neo-card neo-card-no-hover neo-retroui-panel p-4 flex flex-col sm:flex-row sm:items-center gap-4 overflow-hidden">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className={`w-10 h-10 ${roleColors[user.role] || 'bg-neo-lavender'} border-3 border-neo-black
                               flex items-center justify-center font-heading text-sm text-white uppercase flex-shrink-0`}>
@@ -139,19 +139,19 @@ export default function UserManagementPage() {
                 </div>
               </div>
 
-              <div className="neo-card neo-card-no-hover neo-retroui-inset p-2 flex items-center gap-3 flex-shrink-0">
+              <div className="neo-card neo-card-no-hover neo-retroui-inset p-2 grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center sm:gap-3 sm:flex-shrink-0">
                 <select
                   value={user.role}
                   onChange={(e) => roleMutation.mutate({ id: user._id || user.id, role: e.target.value })}
-                  className="neo-select py-1.5 px-3 text-xs w-32"
+                  className="neo-select py-1.5 px-3 text-xs col-span-2 sm:col-span-1 sm:w-32"
                   aria-label={`Role for ${user.name || 'user'}`}
                 >
                   {Object.values(ROLES).map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <span className={`neo-badge ${isUserVerified(user) ? 'bg-neo-green' : 'bg-neo-lavender'}`}>
+                <span className={`neo-badge ${isUserVerified(user) ? 'bg-neo-green' : 'bg-neo-lavender'} w-full justify-center sm:w-auto`}>
                   {isUserVerified(user) ? 'Verified' : 'Unverified'}
                 </span>
-                <button onClick={() => setDeleteId(user._id || user.id)} className="neo-btn neo-btn-sm bg-neo-white text-neo-red">
+                <button onClick={() => setDeleteId(user._id || user.id)} className="neo-btn neo-btn-sm bg-neo-white text-neo-red w-full justify-center sm:w-auto">
                   <HiTrash size={14} />
                 </button>
               </div>

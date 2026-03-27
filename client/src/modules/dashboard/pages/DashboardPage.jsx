@@ -362,8 +362,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats + Primary Filters */}
-      <div className="mb-8 flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-5 md:gap-4 md:overflow-visible md:pb-0">
-        {statusSummary.map((stat) => (
+      <div className="mb-8 grid grid-cols-6 gap-2 min-[420px]:gap-3 md:grid-cols-5 md:gap-4">
+        {statusSummary.map((stat, index) => (
           <motion.div
             key={stat.key}
             whileHover={{ scale: 1.05 }}
@@ -376,7 +376,7 @@ export default function DashboardPage() {
                 setSelectedStatus(stat.key);
               }
             }}
-            className={`${stat.color} flex-none w-[92px] min-[360px]:w-[100px] min-[420px]:w-[112px] md:w-auto md:min-w-0 border-3 border-neo-black shadow-neo p-2 min-[360px]:p-2.5 md:p-4 text-center cursor-pointer transition-transform ${selectedStatus === stat.key ? 'ring-4 ring-neo-black/20 -translate-y-0.5' : ''}`}
+            className={`${stat.color} ${index < 3 ? 'col-span-2 md:col-span-1' : 'col-span-3 md:col-span-1'} w-full min-w-0 border-3 border-neo-black shadow-neo p-2 min-[360px]:p-2.5 md:p-4 text-center cursor-pointer transition-transform ${selectedStatus === stat.key ? 'ring-4 ring-neo-black/20 -translate-y-0.5' : ''}`}
           >
             <p className="font-heading-shade text-2xl min-[360px]:text-[1.7rem] md:text-3xl leading-none">{stat.count}</p>
             <p className="font-heading text-[9px] min-[360px]:text-[10px] uppercase tracking-wider mt-1">{stat.label}</p>
