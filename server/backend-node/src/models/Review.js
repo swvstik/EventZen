@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 /**
  * Review
- * One review per user per event. Rating is 1-5 stars with optional comment.
+ * Multiple reviews per user per event are allowed. Rating is 1-5 stars with optional comment.
  */
 const reviewSchema = new mongoose.Schema({
   userId:    { type: String, required: true },
@@ -13,8 +13,6 @@ const reviewSchema = new mongoose.Schema({
   createdAt: { type: Date,   default: Date.now },
 });
 
-// One review per user per event
-reviewSchema.index({ userId: 1, eventId: 1 }, { unique: true });
 // Fast listing of reviews for an event
 reviewSchema.index({ eventId: 1, createdAt: -1 });
 

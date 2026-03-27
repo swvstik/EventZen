@@ -45,12 +45,6 @@ export class ReviewService {
       }
     }
 
-    // Check for existing review
-    const existing = await this.reviewRepo.findByUserAndEvent(userId, eventId);
-    if (existing) {
-      throw AppError.badRequest('You have already reviewed this event.');
-    }
-
     const review = await this.reviewRepo.create({
       userId,
       userName: userName || 'Anonymous',

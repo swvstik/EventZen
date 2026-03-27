@@ -58,6 +58,7 @@ public class SecurityConfig {
 
                 // -- Health ---------------------------------------------------
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
 
                 // -- Events & Schedule (M1) - public reads -------------------
                 .requestMatchers(HttpMethod.GET,   "/api/events").permitAll()

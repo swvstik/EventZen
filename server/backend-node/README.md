@@ -16,6 +16,8 @@ npm run dev
 ```
 
 Health check: `GET http://localhost:8081/health`
+Swagger UI: `GET http://localhost:8081/swagger`
+OpenAPI file: `GET http://localhost:8081/openapi.yaml`
 
 ## Testing
 
@@ -30,6 +32,8 @@ RUN_KAFKA_INTEGRATION=true npm run test:integration
 ```
 
 By default, the integration test is skipped unless `RUN_KAFKA_INTEGRATION=true`.
+
+See `TESTING.md` for the full backend testing checklist.
 
 ## Environment Variables
 
