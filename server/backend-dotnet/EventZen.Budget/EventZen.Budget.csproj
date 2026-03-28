@@ -9,10 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- .env file support — reads .env into environment variables on startup -->
-    <!-- Same pattern as Node.js dotenv / Spring Boot .env support           -->
-    <PackageReference Include="dotenv.net" Version="3.2.1" />
-
     <!-- MongoDB driver — native, no Entity Framework -->
     <PackageReference Include="MongoDB.Driver" Version="3.1.0" />
 
@@ -27,6 +23,9 @@
 
     <!-- Swagger/OpenAPI -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
+
+    <!-- Prometheus metrics endpoint + HTTP metrics middleware -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
 </Project>

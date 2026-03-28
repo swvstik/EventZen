@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -19,21 +18,12 @@ import uploadRoutes from './routes/uploadRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import { apiLimiter, authLimiter } from './middleware/rateLimit.js';
+import metricsMiddleware from './middleware/metricsMiddleware.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
 import AppError from './utils/AppError.js';
 import { startNotificationEventConsumer, stopNotificationEventConsumer } from './messaging/notificationEventConsumer.js';
 import { getKafkaRuntimeState, stopKafka } from './messaging/kafkaBus.js';
-
-// Load env vars from the service folder first, then shared repo-level .env files.
-const dotenvCandidates = [
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), '..', '.env'),
-  path.resolve(process.cwd(), '..', '..', '.env'),
-];
-const dotenvPath = dotenvCandidates.find((candidatePath) => fs.existsSync(candidatePath));
-if (dotenvPath) {
-  dotenv.config({ path: dotenvPath, override: false });
-}
+import { getMetricsRegistry } from './metrics/metricsRegistry.js';
 
 // -- Validate required env vars ------------------------------------------------
 const required = ['MONGO_URI', 'JWT_SECRET', 'TOKEN_HASH_SECRET', 'INTERNAL_SERVICE_SECRET'];
@@ -80,6 +70,7 @@ const openApiDocument = openApiPath
 // -- Global middleware ---------------------------------------------------------
 app.disable('x-powered-by');
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
+app.use(metricsMiddleware);
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
@@ -98,6 +89,16 @@ app.get('/health', (req, res) => {
     kafka: getKafkaRuntimeState(),
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get('/metrics', async (req, res, next) => {
+  try {
+    const registry = getMetricsRegistry();
+    res.set('Content-Type', registry.contentType);
+    res.end(await registry.metrics());
+  } catch (err) {
+    next(err);
+  }
 });
 
 if (openApiDocument && openApiPath) {

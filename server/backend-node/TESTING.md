@@ -22,6 +22,24 @@ Without `RUN_KAFKA_INTEGRATION=true`, the broker-dependent integration test is s
 - Swagger UI: `http://localhost:8081/swagger`
 - OpenAPI YAML: `http://localhost:8081/openapi.yaml`
 
+## Compose Auto-Seeding (Test Users)
+
+When using `docker compose up --build` from repository root, users are seeded
+automatically by `user-seed` before Node service starts.
+
+Default credentials:
+
+- `admin@ez.local`
+- `vendor@ez.local`
+- `user@ez.local`
+- password: `Eventzen@2026!` (or `TEST_USER_PASSWORD` if configured)
+
+Manual reseed:
+
+```bash
+docker compose run --rm user-seed
+```
+
 ## Manual API Smoke Checklist
 
 1. Health endpoint:
@@ -30,6 +48,7 @@ Without `RUN_KAFKA_INTEGRATION=true`, the broker-dependent integration test is s
    - register, verify email OTP, login, refresh token, logout.
 3. Attendee flow:
    - register attendee, verify event attendee count endpoint, organizer export endpoint.
+   - when Spring sets an event to `CANCELLED`, verify registrations are auto-cancelled via internal endpoint.
 4. Notification flow:
    - list notifications, unread count, mark one read, mark all read.
 5. Review flow:
@@ -48,6 +67,6 @@ Current automated tests include:
 - Review service single-rating upsert and multi-comment behavior
 
 Recommended next additions:
-- Integration tests for attendee registration conflict and waitlist transitions
+- Integration tests for attendee registration conflict, waitlist transitions, and event-cancellation bulk updates
 - Controller-level tests for review and payment routes
 - Contract tests for internal APIs consumed by Spring/.NET services

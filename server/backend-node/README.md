@@ -16,8 +16,34 @@ npm run dev
 ```
 
 Health check: `GET http://localhost:8081/health`
+Metrics: `GET http://localhost:8081/metrics`
 Swagger UI: `GET http://localhost:8081/swagger`
 OpenAPI file: `GET http://localhost:8081/openapi.yaml`
+
+## Test User Seeding
+
+When running via Docker Compose from repository root, test users are seeded
+automatically by the one-shot `user-seed` service before `node-service` starts.
+Seeding is idempotent and uses email-based upsert to avoid duplicates.
+
+Default users:
+
+- `admin@ez.local` (ADMIN)
+- `vendor@ez.local` (VENDOR)
+- `user@ez.local` (CUSTOMER)
+- Password: `Eventzen@2026!` (or `TEST_USER_PASSWORD` if set)
+
+Manual run:
+
+```bash
+npm run seed:users
+```
+
+From repo root through Compose:
+
+```bash
+docker compose run --rm user-seed
+```
 
 ## Testing
 
@@ -90,6 +116,14 @@ MINIO_PUBLIC_BASE_URL=http://localhost:8080/media
 | GET | `/api/attendees/event/:eventId/count` | None |
 | GET | `/api/attendees/event/:eventId/export` | JWT+ORG/ADMIN |
 | POST | `/api/attendees/checkin` | JWT+ORG/ADMIN |
+
+### Internal (Service-to-Service)
+| Method | Path | Auth |
+|--------|------|------|
+| POST | `/api/internal/events/:eventId/cancel-registrations` | Internal secret header |
+
+This internal endpoint is called by Spring when an event transitions to `CANCELLED`
+(admin status patch or non-draft delete), and it bulk-cancels active registrations for that event.
 
 ### Notifications (M5)
 | Method | Path | Auth |

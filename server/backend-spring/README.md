@@ -15,6 +15,7 @@ Spring Boot 3 microservice handling **Events and Venues** for the EventZen polyg
 Notes:
 - Supplier registry and event-supplier assignment APIs were retired.
 - Organizer ownership is still enforced through event ownership fields and role checks.
+- Admin status transitions to `CANCELLED` trigger attendee registration cancellation via Node internal APIs.
 
 ## Quick Start
 
@@ -30,6 +31,7 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS eventzen;"
 ```
 
 Hibernate auto-creates all tables. Health check: `GET http://localhost:8082/health`
+Prometheus metrics: `GET http://localhost:8082/actuator/prometheus`
 Swagger UI: `GET http://localhost:8082/swagger-ui/index.html`
 OpenAPI JSON: `GET http://localhost:8082/v3/api-docs`
 

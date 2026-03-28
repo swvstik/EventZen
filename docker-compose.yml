@@ -60,6 +60,7 @@ services:
     environment:
       MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     ports:
       - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
@@ -102,7 +103,198 @@ services:
       retries: 8
       start_period: 30s
 
+  # ── Monitoring stack ─────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: eventzen-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      node-service:
+        condition: service_started
+      spring-service:
+        condition: service_started
+      dotnet-service:
+        condition: service_started
+      mongodb-exporter:
+        condition: service_started
+      mysqld-exporter:
+        condition: service_started
+      kafka-exporter:
+        condition: service_started
+      nginx-exporter:
+        condition: service_started
+      cadvisor:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: eventzen-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    container_name: eventzen-nginx-exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://nginx-gateway/nginx_status
+    depends_on:
+      nginx-gateway:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: eventzen-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - eventzen-network
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43
+    container_name: eventzen-mongodb-exporter
+    restart: unless-stopped
+    command:
+      - --mongodb.uri=mongodb://mongo-db:27017
+      - --collect-all
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.16.0
+    container_name: eventzen-mysqld-exporter
+    restart: unless-stopped
+    command:
+      - --mysqld.username=root
+      - --mysqld.address=mysql-db:3306
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: eventzen-kafka-exporter
+    restart: unless-stopped
+    command:
+      - --kafka.server=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
   # ── Backend Services ─────────────────────────────────────────────────────────
+
+  vault-preflight:
+    image: curlimages/curl:8.12.1
+    container_name: eventzen-vault-preflight
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - |
+        for i in $(seq 1 30); do
+          if curl -fsS "${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}/v1/sys/health" >/dev/null; then
+            exit 0
+          fi
+          echo "waiting for Vault... attempt $${i}/30"
+          sleep 2
+        done
+        echo "Vault is unavailable at ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}" >&2
+        exit 1
+    environment:
+      VAULT_DOCKER_ADDR: ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+    networks:
+      - eventzen-network
+
+  vault-secrets-init:
+    image: curlimages/curl:8.12.1
+    container_name: eventzen-vault-secrets-init
+    restart: "no"
+    user: "0:0"
+    command: ["sh", "/vault-scripts/vault-secrets-init.sh"]
+    environment:
+      VAULT_ADDR: ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+      VAULT_SKIP_TLS_VERIFY: ${VAULT_SKIP_TLS_VERIFY:-true}
+      VAULT_WRAPPED_SECRET_ID: ${VAULT_WRAPPED_SECRET_ID}
+      VAULT_EXPECTED_WRAP_CREATION_PATH: ${EZ_VAULT_WRAP_PATH:-auth/token/create}
+      VAULT_SHARED_RUNTIME_DIR: /vault-runtime
+      VAULT_SHARED_CLIENT_TOKEN_FILE: /vault-runtime/client_token
+    volumes:
+      - vault_runtime:/vault-runtime
+      - ./scripts/vault/vault-secrets-init.sh:/vault-scripts/vault-secrets-init.sh:ro
+    depends_on:
+      vault-preflight:
+        condition: service_completed_successfully
+    networks:
+      - eventzen-network
+
+  user-seed:
+    build:
+      context: ./server/backend-node
+      dockerfile: Dockerfile.node
+    container_name: eventzen-user-seed
+    restart: "no"
+    command: ["node", "src/scripts/seedUsers.js"]
+    environment:
+      NODE_ENV:            production
+      MONGO_URI:           mongodb://mongo-db:27017/eventzen_node
+      VAULT_ENABLED:       ${VAULT_ENABLED:-true}
+      VAULT_ADDR:          ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+      VAULT_SKIP_TLS_VERIFY: ${VAULT_SKIP_TLS_VERIFY:-true}
+      VAULT_KV_MOUNT:      ${VAULT_KV_MOUNT:-secret}
+      VAULT_KV_PATH:       ${VAULT_KV_PATH:-eventzen/ez-secrets}
+      VAULT_SHARED_CLIENT_TOKEN_FILE: /vault-runtime/client_token
+    depends_on:
+      vault-secrets-init:
+        condition: service_completed_successfully
+      mongo-db:
+        condition: service_healthy
+    volumes:
+      - vault_runtime:/vault-runtime:ro
+    networks:
+      - eventzen-network
 
   node-service:
     build:
@@ -114,25 +306,21 @@ services:
       NODE_ENV:                 production
       PORT:                     8081
       MONGO_URI:                mongodb://mongo-db:27017/eventzen_node
-      JWT_SECRET:               ${JWT_SECRET}
+      VAULT_ENABLED:            ${VAULT_ENABLED:-true}
+      VAULT_ADDR:               ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+      VAULT_SKIP_TLS_VERIFY:    ${VAULT_SKIP_TLS_VERIFY:-true}
+      VAULT_KV_MOUNT:           ${VAULT_KV_MOUNT:-secret}
+      VAULT_KV_PATH:            ${VAULT_KV_PATH:-eventzen/ez-secrets}
+      VAULT_SHARED_CLIENT_TOKEN_FILE: /vault-runtime/client_token
       JWT_ACCESS_EXPIRY:        15m
       JWT_REFRESH_EXPIRY:       7d
       SPRING_BASE_URL:          http://spring-service:8082
-      INTERNAL_SERVICE_SECRET:  ${INTERNAL_SERVICE_SECRET}
-      TOKEN_HASH_SECRET:        ${TOKEN_HASH_SECRET:-}
       COOKIE_SECURE:            ${COOKIE_SECURE:-false}
       CLIENT_URL:               ${CLIENT_URL:-http://localhost:8080}
       CORS_ALLOWED_ORIGINS:     ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
       TRUST_PROXY:              ${TRUST_PROXY:-1}
-      SMTP_HOST:                ${SMTP_HOST}
-      SMTP_USER:                ${SMTP_USER}
-      SMTP_PASS:                ${SMTP_PASS}
-      POLAR_ACCESS_TOKEN:       ${POLAR_ACCESS_TOKEN:-}
       POLAR_SERVER:             ${POLAR_SERVER:-sandbox}
-      POLAR_PRODUCT_ID:         ${POLAR_PRODUCT_ID:-}
       MINIO_ENDPOINT:           ${MINIO_ENDPOINT:-minio:9000}
-      MINIO_ACCESS_KEY:         ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
-      MINIO_SECRET_KEY:         ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_BUCKET:             ${MINIO_BUCKET:-eventzen-media}
       MINIO_PUBLIC_BASE_URL:    ${MINIO_PUBLIC_BASE_URL:-http://localhost:8080/media}
       KAFKA_ENABLED:             ${KAFKA_ENABLED:-true}
@@ -142,12 +330,18 @@ services:
       KAFKA_REGISTRATION_TOPIC:    ${KAFKA_REGISTRATION_TOPIC:-eventzen.registration.lifecycle}
       KAFKA_PAYMENT_TOPIC:         ${KAFKA_PAYMENT_TOPIC:-eventzen.payment.lifecycle}
     depends_on:
+      vault-secrets-init:
+        condition: service_completed_successfully
+      user-seed:
+        condition: service_completed_successfully
       mongo-db:
         condition: service_healthy
       minio:
         condition: service_started
       kafka:
         condition: service_healthy
+    volumes:
+      - vault_runtime:/vault-runtime:ro
     networks:
       - eventzen-network
     healthcheck:
@@ -164,12 +358,15 @@ services:
     container_name: eventzen-spring
     restart: unless-stopped
     environment:
+      VAULT_ENABLED:                      ${VAULT_ENABLED:-true}
+      VAULT_ADDR:                         ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+      VAULT_SKIP_TLS_VERIFY:              ${VAULT_SKIP_TLS_VERIFY:-true}
+      VAULT_KV_MOUNT:                     ${VAULT_KV_MOUNT:-secret}
+      VAULT_KV_PATH:                      ${VAULT_KV_PATH:-eventzen/ez-secrets}
+      VAULT_SHARED_CLIENT_TOKEN_FILE:     /vault-runtime/client_token
       SPRING_DATASOURCE_URL:              jdbc:mysql://mysql-db:3306/eventzen?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME:         root
-      SPRING_DATASOURCE_PASSWORD:         ${MYSQL_ROOT_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO:      update
-      JWT_SECRET:                         ${JWT_SECRET}
-      INTERNAL_SERVICE_SECRET:            ${INTERNAL_SERVICE_SECRET}
       NODE_SERVICE_BASE_URL:              http://node-service:8081
       CORS_ALLOWED_ORIGINS:               ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
       KAFKA_ENABLED:                      ${KAFKA_ENABLED:-true}
@@ -177,10 +374,14 @@ services:
       KAFKA_EVENT_LIFECYCLE_TOPIC:        ${KAFKA_EVENT_LIFECYCLE_TOPIC:-eventzen.event.lifecycle}
     # ⚠️ MySQL must pass its healthcheck before Spring Boot starts
     depends_on:
+      vault-secrets-init:
+        condition: service_completed_successfully
       mysql-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    volumes:
+      - vault_runtime:/vault-runtime:ro
     networks:
       - eventzen-network
     healthcheck:
@@ -197,15 +398,18 @@ services:
     container_name: eventzen-dotnet
     restart: unless-stopped
     environment:
+      VAULT_ENABLED:             ${VAULT_ENABLED:-true}
+      VAULT_ADDR:                ${VAULT_DOCKER_ADDR:-http://host.docker.internal:8200}
+      VAULT_SKIP_TLS_VERIFY:     ${VAULT_SKIP_TLS_VERIFY:-true}
+      VAULT_KV_MOUNT:            ${VAULT_KV_MOUNT:-secret}
+      VAULT_KV_PATH:             ${VAULT_KV_PATH:-eventzen/ez-secrets}
+      VAULT_SHARED_CLIENT_TOKEN_FILE: /vault-runtime/client_token
       ASPNETCORE_ENVIRONMENT:     Production
       ASPNETCORE_URLS:            http://+:8083
       MongoDB__ConnectionString:  mongodb://mongo-db:27017
       MongoDB__DatabaseName:      eventzen_budget
-      JWT__Secret:                ${JWT_SECRET}
       Spring__BaseUrl:            http://spring-service:8082
-      Spring__InternalSecret:     ${INTERNAL_SERVICE_SECRET}
       Node__BaseUrl:              http://node-service:8081
-      Node__InternalSecret:       ${INTERNAL_SERVICE_SECRET}
       Cors__AllowedOrigins:       ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
       Kafka__Enabled:             ${KAFKA_ENABLED:-true}
       Kafka__BootstrapServers:    ${KAFKA_BROKERS:-kafka:9092}
@@ -214,10 +418,14 @@ services:
       Kafka__PaymentTopic:        ${KAFKA_PAYMENT_TOPIC:-eventzen.payment.lifecycle}
       Kafka__RegistrationTopic:   ${KAFKA_REGISTRATION_TOPIC:-eventzen.registration.lifecycle}
     depends_on:
+      vault-secrets-init:
+        condition: service_completed_successfully
       mongo-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    volumes:
+      - vault_runtime:/vault-runtime:ro
     networks:
       - eventzen-network
     healthcheck:
@@ -259,6 +467,9 @@ volumes:
   mysql_data:
   minio_data:
   kafka_data:
+  vault_runtime:
+  prometheus_data:
+  grafana_data:
 
 # ── Internal network (services talk to each other by name, not by IP) ─────────
 networks:

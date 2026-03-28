@@ -1,5 +1,5 @@
 # EventZen Budget Service — M6 Testing Guide
-## ASP.NET Core 8 + MongoDB
+## ASP.NET Core (.NET 10) + MongoDB
 
 ## Automated Tests
 
@@ -24,7 +24,7 @@ RUN_KAFKA_INTEGRATION=true KAFKA_BOOTSTRAP_SERVERS=localhost:9094 dotnet test Ev
 - [ ] MongoDB running on port 27017
 - [ ] Spring Boot running on port 8082 (you need a real eventId from it)
 - [ ] Node.js running on port 8081 (for fresh tokens)
-- [ ] .NET 8 SDK installed: `dotnet --version` should show `8.x.x`
+- [ ] .NET 10 SDK installed: `dotnet --version` should show `10.x.x`
 
 ### Run the service
 ```bash
@@ -261,7 +261,7 @@ Expected response shape:
 - MongoDB isn't running. Start it: `mongod` or via MongoDB Compass
 
 ### `dotnet: command not found`
-- .NET 8 SDK isn't installed: https://dotnet.microsoft.com/download/dotnet/8.0
+- .NET 10 SDK isn't installed: https://dotnet.microsoft.com/download/dotnet/10.0
 
 ### Category enum error `400`
 Valid values are: `VENUE`, `CATERING`, `MARKETING`, `STAFF`, `AV_EQUIPMENT`, `DECORATION`, `TRANSPORT`, `MISCELLANEOUS`

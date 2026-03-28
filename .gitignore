@@ -1,6 +1,7 @@
 
 .env
 **/.env
+vault-secrets.local.json
 
 **/node_modules/
 **/target/
@@ -18,3 +19,5 @@ client/dist/
 Thumbs.db
 
 .fake
+
+**/mydocs/

@@ -19,6 +19,7 @@ dotnet run
 ```
 
 Health check: `GET http://localhost:8083/health`  
+Prometheus metrics: `GET http://localhost:8083/metrics`  
 Swagger UI: `http://localhost:8083/swagger` (Development only)
 
 ## Environment Variables

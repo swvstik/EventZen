@@ -15,6 +15,12 @@ Run broker-backed Kafka integration test (requires broker at localhost:9094):
 RUN_KAFKA_INTEGRATION=true KAFKA_BOOTSTRAP_SERVERS=localhost:9094 mvn test -DskipITs
 ```
 
+Run only the admin cancellation cascade regression test:
+
+```bash
+mvn -Dtest=EventServiceStatusCascadeTest test
+```
+
 > 👋 **This guide assumes you are a beginner.** Every step is spelled out.  
 > If something returns an unexpected error, the Troubleshooting section at the bottom covers the most common causes.
 
@@ -315,7 +321,22 @@ PATCH .../status  →  { "status": "ONGOING" }     → 200
 PATCH .../status  →  { "status": "COMPLETED" }   → 200
 ```
 
-### 4.11 Soft delete event
+### 4.11 Admin cancellation cascade check (status PATCH)
+```
+PATCH {{base_url_spring}}/api/events/{{event_id}}/status
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{ "status": "CANCELLED" }
+```
+→ `200` and event status is now `"CANCELLED"`.
+
+Cross-service expectation:
+- Spring triggers Node internal endpoint `/api/internal/events/:eventId/cancel-registrations`.
+- Active registrations for this event are marked `CANCELLED` in attendee records.
+- If sync fails, Spring logs a warning for investigation.
+
+### 4.12 Soft delete event
 ```
 DELETE {{base_url_spring}}/api/events/{{event_id}}
 Authorization: Bearer {{organizer_token}}
@@ -324,7 +345,7 @@ Authorization: Bearer {{organizer_token}}
 
 > 🔁 **Recreate the event** for testing the next sections — use step 4.3 again and save the new `event_id`.
 
-### 4.12 Internal rating update
+### 4.13 Internal rating update
 ```
 PATCH {{base_url_spring}}/api/internal/events/{{event_id}}/rating
 X-Internal-Secret: eventzen_internal_secret_change_me
@@ -661,7 +682,7 @@ At step 11 and 12, a completely unauthenticated request should return the publis
 | PUT | `/api/events/:id` | ORG/ADMIN | Update event |
 | DELETE | `/api/events/:id` | ORG/ADMIN | Soft delete → CANCELLED |
 | POST | `/api/events/:id/submit` | ORG | Submit for approval |
-| PATCH | `/api/events/:id/status` | ADMIN | Change status |
+| PATCH | `/api/events/:id/status` | ADMIN | Change status (`CANCELLED` transition also cancels attendee registrations) |
 | PATCH | `/api/internal/events/:id/rating` | Internal (X-Internal-Secret header) | Update avg rating |
 | GET | `/api/internal/events/:id/ownership` | Internal (X-Internal-Secret header) | Event owner lookup for trusted services |
 
