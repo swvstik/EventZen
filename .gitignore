@@ -18,3 +18,5 @@ client/dist/
 Thumbs.db
 
 .fake
+
+**/mydocs/

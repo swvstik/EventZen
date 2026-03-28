@@ -27,6 +27,9 @@
 
     <!-- Swagger/OpenAPI -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
+
+    <!-- Prometheus metrics endpoint + HTTP metrics middleware -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
 </Project>

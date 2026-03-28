@@ -4,6 +4,7 @@ using EventZen.Budget.Infrastructure.Middleware;
 using EventZen.Budget.Infrastructure.Messaging;
 using EventZen.Budget.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
+using Prometheus;
 
 // -- Load .env file ------------------------------------------------------------
 // Reads .env from the service folder or shared repo root into environment
@@ -75,7 +76,7 @@ builder.Services.AddControllers()
             new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// Use the .NET 8 IExceptionHandler interface - cleaner than middleware
+// Use the built-in IExceptionHandler interface - cleaner than middleware
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -127,6 +128,7 @@ using (var scope = app.Services.CreateScope())
 // -- Middleware pipeline - ORDER MATTERS ---------------------------------------
 app.UseExceptionHandler();   // Must be first to catch exceptions from all middleware
 app.UseCors();               // Before auth so preflight OPTIONS requests pass
+app.UseHttpMetrics();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -151,6 +153,8 @@ app.MapGet("/health", (IOptions<KafkaMessagingOptions> kafkaOptions, KafkaRuntim
     },
     timestamp = DateTime.UtcNow,
 })).AllowAnonymous();
+
+app.MapMetrics().AllowAnonymous();
 
 app.Run();
 

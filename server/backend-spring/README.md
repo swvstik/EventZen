@@ -30,6 +30,7 @@ mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS eventzen;"
 ```
 
 Hibernate auto-creates all tables. Health check: `GET http://localhost:8082/health`
+Prometheus metrics: `GET http://localhost:8082/actuator/prometheus`
 Swagger UI: `GET http://localhost:8082/swagger-ui/index.html`
 OpenAPI JSON: `GET http://localhost:8082/v3/api-docs`
 

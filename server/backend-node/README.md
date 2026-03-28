@@ -16,6 +16,7 @@ npm run dev
 ```
 
 Health check: `GET http://localhost:8081/health`
+Metrics: `GET http://localhost:8081/metrics`
 Swagger UI: `GET http://localhost:8081/swagger`
 OpenAPI file: `GET http://localhost:8081/openapi.yaml`
 

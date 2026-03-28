@@ -17,6 +17,7 @@ behind a single Nginx gateway.
 	- MySQL (Spring domain)
 	- Redpanda/Kafka (event-driven messaging)
 	- MinIO (object storage for media)
+	- Prometheus + Grafana (health/metrics monitoring)
 
 ## Repository Structure
 
@@ -47,6 +48,32 @@ behind a single Nginx gateway.
 	- MinIO API: 9000
 	- MinIO Console: 9001
 	- Kafka external: 9094
+	- Prometheus UI: 9090 (localhost only)
+	- Grafana UI: 3000 (localhost only)
+
+## Monitoring
+
+Prometheus and Grafana are included in Docker Compose for application and infrastructure monitoring.
+
+- Prometheus: `http://127.0.0.1:9090`
+- Grafana: `http://127.0.0.1:3000`
+- Grafana default credentials are read from `.env`:
+	- `GRAFANA_ADMIN_USER`
+	- `GRAFANA_ADMIN_PASSWORD`
+
+Monitored targets include:
+
+- Node service (`/metrics`)
+- Spring service (`/actuator/prometheus`)
+- .NET service (`/metrics`)
+- Nginx exporter
+- cAdvisor (container metrics)
+- MongoDB exporter
+- MySQL exporter
+- Kafka exporter
+- MinIO native metrics endpoint
+
+See `monitoring/README.md` for details.
 
 ## Quick Start (Docker, Recommended)
 
@@ -210,4 +237,3 @@ To skip Kafka integration checks:
 ## Implementation To-Do
 - Secrets manager service
 - CI/CD
-- Prometheus & Grafana for monitoring

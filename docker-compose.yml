@@ -60,6 +60,7 @@ services:
     environment:
       MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     ports:
       - "127.0.0.1:${MINIO_API_HOST_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
@@ -101,6 +102,124 @@ services:
       timeout: 10s
       retries: 8
       start_period: 30s
+
+  # ── Monitoring stack ─────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: eventzen-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      node-service:
+        condition: service_started
+      spring-service:
+        condition: service_started
+      dotnet-service:
+        condition: service_started
+      mongodb-exporter:
+        condition: service_started
+      mysqld-exporter:
+        condition: service_started
+      kafka-exporter:
+        condition: service_started
+      nginx-exporter:
+        condition: service_started
+      cadvisor:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: eventzen-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    container_name: eventzen-nginx-exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://nginx-gateway/nginx_status
+    depends_on:
+      nginx-gateway:
+        condition: service_started
+    networks:
+      - eventzen-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: eventzen-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - eventzen-network
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43
+    container_name: eventzen-mongodb-exporter
+    restart: unless-stopped
+    command:
+      - --mongodb.uri=mongodb://mongo-db:27017
+      - --collect-all
+    depends_on:
+      mongo-db:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.16.0
+    container_name: eventzen-mysqld-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: root:${MYSQL_ROOT_PASSWORD}@(mysql-db:3306)/
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - eventzen-network
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: eventzen-kafka-exporter
+    restart: unless-stopped
+    command:
+      - --kafka.server=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - eventzen-network
 
   # ── Backend Services ─────────────────────────────────────────────────────────
 
@@ -278,6 +397,8 @@ volumes:
   mysql_data:
   minio_data:
   kafka_data:
+  prometheus_data:
+  grafana_data:
 
 # ── Internal network (services talk to each other by name, not by IP) ─────────
 networks:
