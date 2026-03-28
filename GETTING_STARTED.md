@@ -1,25 +1,46 @@
 # EventZen Getting Started
 
-This document is a full, professor-friendly setup flow for running EventZen with Docker + Vault.
+This is the fastest, most explicit setup guide for running EventZen locally with Docker and Vault.
 
-Runtime model used by this project:
+If you follow this document top to bottom, you should get a working stack on first run.
 
-1. Secrets are stored in Vault at one shared path.
-2. You pass one wrapped token in `.env`.
-3. Startup unwraps once and injects secrets into app services.
+## Runtime Model (Important)
 
-No local secret file is required at runtime.
+EventZen startup is Vault-first:
 
-## 1) Install prerequisites
+1. Secrets live in Vault at one shared KV path.
+2. You provide one wrapped token in `.env` (`VAULT_WRAPPED_SECRET_ID`).
+3. Startup unwraps once and shares a short-lived runtime token through an internal volume.
+4. App services load secrets from Vault at boot.
+
+No local runtime secret file is required.
+
+## Quick Path (Recommended)
+
+If Vault is already running and populated, this is enough:
+
+1. Copy `.env.example` to `.env`.
+2. Ensure Vault values in `.env` are correct.
+3. Run:
+
+```powershell
+./scripts/start-local.ps1
+```
+
+That helper generates a fresh wrapped token and starts the stack.
+
+## Full Setup (From Zero)
+
+## 1) Prerequisites
 
 Required:
 
-- Docker Desktop (running)
+- Docker Desktop running
 - Docker Compose v2
-- Vault server (running)
-- Vault CLI (recommended for easy token generation)
+- Vault server running
+- Vault CLI (recommended)
 
-Install Vault CLI on Windows (pick one):
+Install Vault CLI (Windows):
 
 ```powershell
 winget install HashiCorp.Vault
@@ -39,17 +60,15 @@ docker compose version
 vault --version
 ```
 
-## 2) Start Vault (if you do not already have one)
+## 2) Start Vault (Skip if you already have one)
 
-If you already run Vault locally, skip this section.
-
-Quick local dev Vault using Docker:
+Quick local Vault container:
 
 ```powershell
 docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
 ```
 
-Set host shell variables for Vault CLI:
+Configure CLI environment:
 
 ```powershell
 $env:VAULT_ADDR = "http://127.0.0.1:8200"
@@ -57,13 +76,13 @@ $env:VAULT_TOKEN = "root-dev-token"
 vault status
 ```
 
-Container connectivity check (important):
+Verify containers can reach Vault:
 
 ```powershell
 docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
 ```
 
-## 3) Prepare `.env`
+## 3) Prepare .env
 
 Copy template:
 
@@ -71,186 +90,214 @@ Copy template:
 Copy-Item .env.example .env
 ```
 
-Open `.env` and set at least these keys:
+Set at least these values in `.env`:
 
-- VAULT_ADDR
-- VAULT_DOCKER_ADDR
-- VAULT_SKIP_TLS_VERIFY
-- VAULT_KV_MOUNT
-- VAULT_KV_PATH
-- EZ_VAULT_WRAP_PATH
-- VAULT_WRAPPED_SECRET_ID (leave blank for now)
-- MYSQL_ROOT_PASSWORD
-- MINIO_ROOT_USER
-- MINIO_ROOT_PASSWORD
-- GRAFANA_ADMIN_USER
-- GRAFANA_ADMIN_PASSWORD
+- `VAULT_ADDR=http://127.0.0.1:8200`
+- `VAULT_DOCKER_ADDR=http://host.docker.internal:8200`
+- `VAULT_SKIP_TLS_VERIFY=true`
+- `VAULT_KV_MOUNT=secret`
+- `VAULT_KV_PATH=eventzen/ez-secrets`
+- `EZ_VAULT_WRAP_PATH=auth/token/create`
+- `VAULT_WRAPPED_SECRET_ID=` (leave blank for now)
+- `MYSQL_ROOT_PASSWORD=...`
+- `MINIO_ROOT_USER=...`
+- `MINIO_ROOT_PASSWORD=...`
+- `GRAFANA_ADMIN_USER=...`
+- `GRAFANA_ADMIN_PASSWORD=...`
 
-Recommended defaults:
+Host tooling ports are configurable in `.env` if needed:
 
-- VAULT_ADDR=http://127.0.0.1:8200
-- VAULT_DOCKER_ADDR=http://host.docker.internal:8200
-- VAULT_SKIP_TLS_VERIFY=true
-- VAULT_KV_MOUNT=secret
-- VAULT_KV_PATH=eventzen/ez-secrets
-- EZ_VAULT_WRAP_PATH=auth/token/create
+- `MONGO_HOST_PORT`
+- `MYSQL_HOST_PORT`
+- `MINIO_API_HOST_PORT`
+- `MINIO_CONSOLE_HOST_PORT`
+- `KAFKA_HOST_PORT`
+- `PROMETHEUS_HOST_PORT`
+- `GRAFANA_HOST_PORT`
 
-## 4) Put secrets into Vault
+## 4) Put Secrets Into Vault
 
 Use `vault-secrets.example.json` as the required key list.
 
-If KV v2 mount `secret` does not exist yet:
+Create KV mount if needed:
 
 ```powershell
 vault secrets enable -path=secret kv-v2
 ```
 
-Use Vault UI for the secret data itself:
+Then in Vault UI:
 
-1. Open Vault UI.
-2. Open KV v2 mount `secret`.
-3. Create/edit path `eventzen/ez-secrets`.
-4. Copy all keys from `vault-secrets.example.json` and set real values.
+1. Open KV v2 mount `secret`.
+2. Create or edit path `eventzen/ez-secrets`.
+3. Add all keys from `vault-secrets.example.json` with real values.
 
-Important:
+Rules:
 
 - Key names must match exactly.
 - Missing keys can cause service startup failure.
 
-## 5) Generate one wrapped token
+## 5) Generate Wrapped Token
 
-Local dev command (simple):
+Option A (manual output):
 
 ```powershell
-$wrap = vault token create -policy=root -ttl=1h -wrap-ttl=30m -format=json | ConvertFrom-Json
-$wrap.wrap_info.token
+./scripts/generate-vault-wrapped-token.ps1
 ```
 
-Put that token into `.env`:
+Copy the printed value into `.env`:
 
 ```dotenv
 VAULT_WRAPPED_SECRET_ID=<wrapped-token>
 ```
 
+Option B (auto-write into `.env`):
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+```
+
 Rules:
 
-- Wrapped tokens are single-use.
-- Wrapped tokens expire.
-- Generate a new wrapped token before each `docker compose up`.
+- Wrapped token is single-use.
+- Wrapped token expires.
+- Generate a fresh one before each manual `docker compose up`.
 
 ## 6) Start EventZen
 
-From repository root:
-
-```powershell
-docker compose up --build
-```
-
-Or run the helper to generate a fresh wrapped token and start automatically:
+Preferred helper:
 
 ```powershell
 ./scripts/start-local.ps1
 ```
 
+Manual startup:
+
+```powershell
+docker compose up --build
+```
+
 What startup does:
 
-1. `vault-preflight` checks Vault availability.
+1. `vault-preflight` checks Vault reachability.
 2. `vault-secrets-init` validates and unwraps your wrapped token.
-3. Shared runtime token is written to an internal volume.
-4. App services read `secret/eventzen/ez-secrets` and export env vars.
-5. Services become healthy.
+3. Shared runtime token is written to internal volume.
+4. Node, Spring, and .NET read Vault secrets and start.
+5. Gateway starts after backend healthchecks pass.
 
-## 7) Verify running state
+## 7) Verify
 
-Gateway health:
+Health endpoint:
 
 ```powershell
 curl http://localhost:8080/health
 ```
 
-Container state:
+Container status:
 
 ```powershell
 docker compose ps
 ```
 
+Expected key services:
+
+- `node-service` healthy
+- `spring-service` healthy
+- `dotnet-service` healthy
+- `nginx-gateway` up
+
 Useful UIs:
 
-- App/Gateway: http://localhost:8080
+- App: http://localhost:8080
 - Grafana: http://localhost:3000
 - Prometheus: http://localhost:9090
 - MinIO Console: http://localhost:9001
 
-## 8) Stop and reset
+## 8) Stop / Reset
 
-Stop:
+Stop everything:
 
 ```powershell
 docker compose down
 ```
 
-Stop + wipe volumes:
+Stop and remove volumes:
 
 ```powershell
 docker compose down -v
 ```
 
-After `down -v`, run again with a fresh wrapped token.
+After `down -v`, generate a fresh wrapped token for next run.
 
-## 9) Troubleshooting (real failures)
+## 9) Troubleshooting
 
-If startup fails, run:
+Get focused startup logs:
 
 ```powershell
 docker compose logs --no-color --tail=200 vault-secrets-init user-seed node-service spring-service dotnet-service nginx-gateway
 ```
 
-Most common error:
+Common failure: wrapped token invalid
 
-- `vault-secrets-init: wrapping lookup failed: wrapping token is not valid or does not exist`
-- Meaning: token missing, expired, or already consumed.
-- Fix: generate a fresh wrapped token and retry.
+- Error: `vault-secrets-init: wrapping lookup failed: wrapping token is not valid or does not exist`
+- Meaning: token missing, expired, already consumed, or mismatched path
+- Fix:
+1. Generate a fresh wrapped token
+2. Ensure `EZ_VAULT_WRAP_PATH=auth/token/create`
+3. Retry startup
 
-## 10) Do these `.env` values accept any value?
+Common failure: Vault not reachable from containers
 
-Not all of them.
+- Check `VAULT_DOCKER_ADDR`
+- Validate with:
 
-Works if any valid value:
+```powershell
+docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
+```
 
-- MYSQL_ROOT_PASSWORD
-- MINIO_ROOT_USER
-- MINIO_ROOT_PASSWORD
-- GRAFANA_ADMIN_USER
-- GRAFANA_ADMIN_PASSWORD
+Common failure: app services never start
 
-Must match your Vault/runtime topology:
+- Usually blocked behind failed `vault-secrets-init`
+- Fix Vault issue first, then restart
 
-- VAULT_ADDR: where host CLI reaches Vault.
-- VAULT_DOCKER_ADDR: where containers reach Vault.
-- VAULT_SKIP_TLS_VERIFY: true only for local/dev self-signed setups.
-- VAULT_KV_MOUNT: must match actual KV mount name.
-- VAULT_KV_PATH: must match actual secret path.
-- EZ_VAULT_WRAP_PATH: must match wrapping creation path (default `auth/token/create`).
-- VAULT_WRAPPED_SECRET_ID: must be fresh, valid, single-use wrapped token.
+## 10) Which .env Values Can Be Arbitrary?
 
-If Vault values are wrong, startup fails even if secret contents are correct.
+Usually arbitrary (valid non-empty values):
 
-## 11) Security notes
+- `MYSQL_ROOT_PASSWORD`
+- `MINIO_ROOT_USER`
+- `MINIO_ROOT_PASSWORD`
+- `GRAFANA_ADMIN_USER`
+- `GRAFANA_ADMIN_PASSWORD`
 
-- Do not commit `.env`.
-- Do not store long-lived production tokens in `.env`.
-- Rotate secrets if exposed in logs/chat/screenshots.
-- For production, replace root policy token flow with a least-privilege policy.
+Must match real topology/config:
 
----
+- `VAULT_ADDR`
+- `VAULT_DOCKER_ADDR`
+- `VAULT_SKIP_TLS_VERIFY`
+- `VAULT_KV_MOUNT`
+- `VAULT_KV_PATH`
+- `EZ_VAULT_WRAP_PATH`
+- `VAULT_WRAPPED_SECRET_ID`
 
-Minimum path to success:
+## 11) Security Notes
 
-1. Sections 3, 4, 5, 6.
-2. If it fails, run section 9 command and fix token/path mismatch first.
+- Never commit `.env`.
+- Do not keep long-lived production tokens in `.env`.
+- Rotate secrets if exposed.
+- For production, replace root-policy workflow with least-privilege Vault policies.
 
-Optional helper flags:
+## Optional Helper Flags
 
-- `./scripts/start-local.ps1 -Detach` starts in background.
-- `./scripts/start-local.ps1 -NoBuild` skips image rebuild.
-- `./scripts/start-local.ps1 -KeepWrappedToken` keeps token in `.env` after run.
+`scripts/start-local.ps1`:
+
+- `-Detach` run in background
+- `-NoBuild` skip image rebuild
+- `-KeepWrappedToken` keep wrapped token in `.env` after startup
+
+## Minimum Success Checklist
+
+1. Vault reachable from host and containers
+2. `secret/eventzen/ez-secrets` populated
+3. Fresh `VAULT_WRAPPED_SECRET_ID`
+4. `docker compose up --build` or `./scripts/start-local.ps1`
+5. `http://localhost:8080/health` returns OK

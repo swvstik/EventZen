@@ -59,6 +59,10 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: Run client tests
+        working-directory: client
+        run: npm test
+
       - name: Run client lint
         working-directory: client
         run: npm run lint -- --max-warnings=0
