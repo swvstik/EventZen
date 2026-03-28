@@ -1,6 +1,7 @@
 
 .env
 **/.env
+vault-secrets.local.json
 
 **/node_modules/
 **/target/

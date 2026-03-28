@@ -77,6 +77,8 @@ See `monitoring/README.md` for details.
 
 ## Quick Start (Docker, Recommended)
 
+If you want a full beginner-friendly walkthrough, follow `GETTING_STARTED.md`.
+
 ### 1. Prepare environment
 
 ```bash
@@ -89,20 +91,31 @@ On Windows PowerShell:
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set real values for at least:
+Edit `.env` and set at least:
 
-- `JWT_SECRET`
-- `INTERNAL_SERVICE_SECRET`
-- `TOKEN_HASH_SECRET`
-- `MYSQL_ROOT_PASSWORD`
-- `SMTP_HOST`
-- `SMTP_USER`
-- `SMTP_PASS`
+- Vault connectivity variables (`VAULT_ADDR`, `VAULT_*`)
+- Container-side Vault address (`VAULT_DOCKER_ADDR`) for Docker networking
+- Wrapped SecretID placeholder (`VAULT_WRAPPED_SECRET_ID`)
+- Infra secrets still used by third-party images (`MYSQL_ROOT_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`)
+
+Use `vault-secrets.example.json` as your key template and create/update these values directly in the Vault UI at `secret/eventzen/ez-secrets`.
+
+Generate one wrapped token in your Vault client for that secret access scope, then paste it into `.env`:
+
+- `VAULT_WRAPPED_SECRET_ID=<wrapped-token>`
+
+Generate a fresh wrapped token before each `docker compose up` because wrapped tokens are single-use and short-lived.
 
 ### 2. Build and start everything
 
 ```bash
 docker compose up --build
+```
+
+Or use the one-command helper (generates a fresh wrapped token automatically):
+
+```powershell
+./scripts/start-local.ps1
 ```
 
 This command builds and installs dependencies for all services, including the
@@ -192,6 +205,11 @@ The gateway forwards requests as follows:
 - `/media` -> MinIO
 - Non-API routes -> React SPA static build
 
+Cancellation behavior:
+
+- When an admin changes an event status to `CANCELLED` (or a non-draft event is deleted), Spring now triggers attendee registration cancellation in the Node service.
+- This keeps event state and attendee/ticket state consistent across services.
+
 ## Testing and Quality Gate
 
 Run the repository-wide quality gate from project root:
@@ -235,5 +253,5 @@ To skip Kafka integration checks:
 - Nginx
 
 ## Implementation To-Do
-- Secrets manager service
+
 - CI/CD

@@ -1,20 +1,9 @@
-using dotenv.net;
 using EventZen.Budget.Infrastructure.Extensions;
 using EventZen.Budget.Infrastructure.Middleware;
 using EventZen.Budget.Infrastructure.Messaging;
 using EventZen.Budget.Infrastructure.Persistence;
 using Microsoft.Extensions.Options;
 using Prometheus;
-
-// -- Load .env file ------------------------------------------------------------
-// Reads .env from the service folder or shared repo root into environment
-// variables before ASP.NET configuration is built.
-// Safe to call when .env doesn't exist (Docker / CI use real env vars instead).
-DotEnv.Load(options: new DotEnvOptions(
-    envFilePaths: [".env", "../.env", "../../.env", "../../../.env"],
-    ignoreExceptions: true,          // no crash if .env is absent (Docker, CI)
-    overwriteExistingVars: false      // real env vars always win over .env values
-));
 
 var builder = WebApplication.CreateBuilder(args);
 

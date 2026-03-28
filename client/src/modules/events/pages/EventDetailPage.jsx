@@ -300,7 +300,6 @@ export default function EventDetailPage() {
   const tiers = event?.ticketTiers || [];
   const selectedTierConfig = tiers.find((tier) => String(tier.id) === String(selectedTier));
   const selectedTierMaxPerOrder = Math.max(1, Number(selectedTierConfig?.maxPerOrder || 10));
-  const effectiveQuantity = Math.min(quantity, selectedTierMaxPerOrder);
   const myRegistrations = Array.isArray(myRegsData) ? myRegsData : (myRegsData?.registrations || []);
   const myEventRegistrations = myRegistrations.filter(
     (r) => String(r.eventId) === String(event?.id) && r.status !== 'CANCELLED'
@@ -353,7 +352,10 @@ export default function EventDetailPage() {
   const eventDescription = stripOwnVenueDetails(event?.description);
   const organizerName = String(event?.organizerName || '').trim();
   const parsedTags = parseTags(event?.tags);
+  const selectedTierOwnedCount = Number(ownedByTier[String(selectedTierConfig?.id || selectedTier)] || 0);
   const selectedTierPrice = Number(selectedTierConfig?.price || 0);
+  const selectedTierRemainingAllowance = Math.max(selectedTierMaxPerOrder - selectedTierOwnedCount, 0);
+  const selectedTierMaxReached = Boolean(selectedTierConfig) && selectedTierRemainingAllowance <= 0;
   const selectedTierRegisteredCount = Number(countsByTier[String(selectedTierConfig?.id || selectedTier)] || 0);
   const selectedTierCapacity = Number(selectedTierConfig?.capacity || 0);
   const selectedTierRemaining = Math.max(selectedTierCapacity - selectedTierRegisteredCount, 0);
@@ -361,6 +363,7 @@ export default function EventDetailPage() {
   const waitlistEnabled = event?.allowWaitlist !== false;
   const selectedTierCanJoinWaitlist = selectedTierSoldOut && waitlistEnabled;
   const selectedTierSoldOutNoWaitlist = selectedTierSoldOut && !waitlistEnabled;
+  const effectiveQuantity = Math.max(1, Math.min(quantity, Math.max(selectedTierRemainingAllowance, 1)));
   const estimatedSubtotal = selectedTierPrice * Number(effectiveQuantity || 1);
   const estimatedFees = selectedTierPrice > 0 ? Math.round(estimatedSubtotal * 0.1) : 0;
   const estimatedTotal = estimatedSubtotal + estimatedFees;
@@ -370,6 +373,9 @@ export default function EventDetailPage() {
     if (selectedTierSoldOutNoWaitlist) {
       return toast.error('Tickets are sold out for this tier and waitlist is disabled.');
     }
+    if (selectedTierMaxReached) {
+      return toast.error(`Ticket limit reached for this tier. Max allowed per person is ${selectedTierMaxPerOrder}.`);
+    }
     setCheckoutOpen(true);
   };
 
@@ -377,6 +383,9 @@ export default function EventDetailPage() {
     if (!selectedTier) return toast.error('Please select a ticket tier');
     if (selectedTierSoldOutNoWaitlist) {
       return toast.error('Tickets are sold out for this tier and waitlist is disabled.');
+    }
+    if (selectedTierMaxReached) {
+      return toast.error(`Ticket limit reached for this tier. Max allowed per person is ${selectedTierMaxPerOrder}.`);
     }
     registerMutation.mutate({ eventId: event.id, tierId: selectedTier, quantity: effectiveQuantity });
   };
@@ -842,15 +851,15 @@ export default function EventDetailPage() {
                   id="ticket-quantity"
                   type="number"
                   min={1}
-                  max={selectedTierMaxPerOrder}
+                  max={Math.max(selectedTierRemainingAllowance, 1)}
                   value={effectiveQuantity}
-                  onChange={(e) => setQuantity(Math.min(selectedTierMaxPerOrder, Math.max(1, Number(e.target.value) || 1)))}
-                  disabled={selectedTierSoldOutNoWaitlist}
+                  onChange={(e) => setQuantity(Math.min(Math.max(selectedTierRemainingAllowance, 1), Math.max(1, Number(e.target.value) || 1)))}
+                  disabled={selectedTierSoldOutNoWaitlist || selectedTierMaxReached}
                   className="neo-input"
                 />
                 {selectedTier && (
                   <p className="font-body text-[10px] text-neo-black/65 mt-1">
-                    Max per person for this tier: {selectedTierMaxPerOrder}.
+                    Max per person for this tier: {selectedTierMaxPerOrder}. You own {selectedTierOwnedCount}. Remaining: {selectedTierRemainingAllowance}.
                   </p>
                 )}
               </div>
@@ -864,19 +873,26 @@ export default function EventDetailPage() {
                   )}
                   <button
                     onClick={handleOpenCheckout}
-                    disabled={registerMutation.isPending || !selectedTier || selectedTierSoldOutNoWaitlist}
+                    disabled={registerMutation.isPending || !selectedTier || selectedTierSoldOutNoWaitlist || selectedTierMaxReached}
                     className="w-full neo-btn-primary neo-btn-lg disabled:opacity-50"
                   >
                     {registerMutation.isPending
                       ? 'Processing...'
                       : selectedTierSoldOutNoWaitlist
                         ? 'Sold Out'
+                        : selectedTierMaxReached
+                          ? 'Ticket Limit Reached'
                         : selectedTierCanJoinWaitlist
                           ? 'Join Waitlist'
-                          : (totalOwned > 0 ? 'Buy More Tickets' : 'Register Now')}
+                          : (selectedTierOwnedCount > 0 ? 'Buy More Tickets' : 'Register Now')}
                   </button>
                   {selectedTierSoldOutNoWaitlist && (
                     <p className="font-body text-[11px] text-neo-red mt-2">Tickets are sold out.</p>
+                  )}
+                  {selectedTierMaxReached && (
+                    <p className="font-body text-[11px] text-neo-red mt-2">
+                      You reached the per-tier ticket limit for this event.
+                    </p>
                   )}
                   {selectedTierCanJoinWaitlist && (
                     <p className="font-body text-[11px] text-neo-black/75 mt-2">Tickets are sold out, join waitlist?</p>
@@ -909,7 +925,7 @@ export default function EventDetailPage() {
             <button
               type="button"
               onClick={handleProceedCheckout}
-              disabled={registerMutation.isPending || !selectedTier}
+              disabled={registerMutation.isPending || !selectedTier || selectedTierSoldOutNoWaitlist || selectedTierMaxReached}
               className="neo-btn neo-btn-sm bg-neo-yellow disabled:opacity-50"
             >
               {registerMutation.isPending ? 'Processing...' : 'Proceed to Checkout'}

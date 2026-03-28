@@ -48,6 +48,7 @@ docker compose run --rm user-seed
    - register, verify email OTP, login, refresh token, logout.
 3. Attendee flow:
    - register attendee, verify event attendee count endpoint, organizer export endpoint.
+   - when Spring sets an event to `CANCELLED`, verify registrations are auto-cancelled via internal endpoint.
 4. Notification flow:
    - list notifications, unread count, mark one read, mark all read.
 5. Review flow:
@@ -66,6 +67,6 @@ Current automated tests include:
 - Review service single-rating upsert and multi-comment behavior
 
 Recommended next additions:
-- Integration tests for attendee registration conflict and waitlist transitions
+- Integration tests for attendee registration conflict, waitlist transitions, and event-cancellation bulk updates
 - Controller-level tests for review and payment routes
 - Contract tests for internal APIs consumed by Spring/.NET services

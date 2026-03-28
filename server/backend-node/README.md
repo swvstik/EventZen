@@ -117,6 +117,14 @@ MINIO_PUBLIC_BASE_URL=http://localhost:8080/media
 | GET | `/api/attendees/event/:eventId/export` | JWT+ORG/ADMIN |
 | POST | `/api/attendees/checkin` | JWT+ORG/ADMIN |
 
+### Internal (Service-to-Service)
+| Method | Path | Auth |
+|--------|------|------|
+| POST | `/api/internal/events/:eventId/cancel-registrations` | Internal secret header |
+
+This internal endpoint is called by Spring when an event transitions to `CANCELLED`
+(admin status patch or non-draft delete), and it bulk-cancels active registrations for that event.
+
 ### Notifications (M5)
 | Method | Path | Auth |
 |--------|------|------|

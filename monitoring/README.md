@@ -33,6 +33,12 @@ From repository root:
 docker compose up --build
 ```
 
+Monitoring asset locations:
+
+- `monitoring/prometheus/prometheus.yml`
+- `monitoring/grafana/provisioning`
+- `monitoring/grafana/dashboards`
+
 ## Verify
 
 1. Open Prometheus and check Targets page:

@@ -15,6 +15,7 @@ Spring Boot 3 microservice handling **Events and Venues** for the EventZen polyg
 Notes:
 - Supplier registry and event-supplier assignment APIs were retired.
 - Organizer ownership is still enforced through event ownership fields and role checks.
+- Admin status transitions to `CANCELLED` trigger attendee registration cancellation via Node internal APIs.
 
 ## Quick Start
 

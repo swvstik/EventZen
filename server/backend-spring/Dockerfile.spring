@@ -27,15 +27,22 @@ RUN mvn package -DskipTests -q
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends curl jq \
+	&& rm -rf /var/lib/apt/lists/*
+
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 # Copy only the jar — not the entire build toolchain
 COPY --from=builder /build/target/*.jar app.jar
+COPY scripts/vault-bootstrap.sh /usr/local/bin/vault-bootstrap.sh
 
-RUN chown appuser:appgroup app.jar
+RUN chmod +x /usr/local/bin/vault-bootstrap.sh \
+	&& chown appuser:appgroup app.jar
 USER appuser
 
 EXPOSE 8082
 
 # Spring Boot reads env vars at startup — no .env needed in Docker
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["/usr/local/bin/vault-bootstrap.sh"]
+CMD ["java", "-jar", "app.jar"]

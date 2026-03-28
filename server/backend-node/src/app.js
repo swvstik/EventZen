@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -25,17 +24,6 @@ import AppError from './utils/AppError.js';
 import { startNotificationEventConsumer, stopNotificationEventConsumer } from './messaging/notificationEventConsumer.js';
 import { getKafkaRuntimeState, stopKafka } from './messaging/kafkaBus.js';
 import { getMetricsRegistry } from './metrics/metricsRegistry.js';
-
-// Load env vars from the service folder first, then shared repo-level .env files.
-const dotenvCandidates = [
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), '..', '.env'),
-  path.resolve(process.cwd(), '..', '..', '.env'),
-];
-const dotenvPath = dotenvCandidates.find((candidatePath) => fs.existsSync(candidatePath));
-if (dotenvPath) {
-  dotenv.config({ path: dotenvPath, override: false });
-}
 
 // -- Validate required env vars ------------------------------------------------
 const required = ['MONGO_URI', 'JWT_SECRET', 'TOKEN_HASH_SECRET', 'INTERNAL_SERVICE_SECRET'];

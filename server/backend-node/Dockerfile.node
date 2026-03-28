@@ -27,13 +27,17 @@ WORKDIR /app
 
 # Non-root user — running as root inside a container is a security risk
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache curl jq
 
 # Copy installed node_modules from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy source code
 COPY src ./src
+COPY scripts/vault-bootstrap.sh /usr/local/bin/vault-bootstrap.sh
 COPY package.json ./
+
+RUN chmod +x /usr/local/bin/vault-bootstrap.sh
 
 # Own the files
 RUN chown -R appuser:appgroup /app
@@ -42,4 +46,5 @@ USER appuser
 EXPOSE 8081
 
 # Use npm start (not npm run dev) — no nodemon in production
+ENTRYPOINT ["/usr/local/bin/vault-bootstrap.sh"]
 CMD ["node", "src/app.js"]

@@ -324,10 +324,16 @@ public class EventService {
         if (isApprovalDecision) {
             notificationClientService.notifyEventStatusDecision(saved, newStatus);
         }
-        if (newStatus == EventStatus.PUBLISHED) {
-            syncPublishedVenueBooking(saved);
-        } else {
-            syncPublishedVenueBooking(saved);
+
+        syncPublishedVenueBooking(saved);
+
+        boolean transitionedToCancelled = previousStatus != EventStatus.CANCELLED
+            && newStatus == EventStatus.CANCELLED;
+        if (transitionedToCancelled) {
+            boolean synced = attendeeClientService.cancelRegistrationsForEvent(saved.getId());
+            if (!synced) {
+                log.warn("Event {} marked CANCELLED but attendee cancellation sync could not be confirmed.", saved.getId());
+            }
         }
         return new EventResponse(saved);
     }
