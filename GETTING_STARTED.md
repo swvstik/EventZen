@@ -29,9 +29,35 @@ If Vault is already running and populated, this is enough:
 
 That helper generates a fresh wrapped token and starts the stack.
 
+## Setup Flow (Do This In Order)
+
+```mermaid
+flowchart TD
+	A[Start] --> B[Step 1: Complete prerequisites]
+	B --> C{Do you already have Vault running?}
+	C -- No --> D[Step 2: Start local Vault]
+	C -- Yes --> E[Step 2: Reuse existing Vault]
+	D --> F[Step 3: Prepare .env]
+	E --> F
+	F --> G[Step 4: Put secrets into Vault path]
+	G --> H[Step 5: Generate wrapped token]
+	H --> I[Step 6: Start EventZen]
+	I --> J{Health check OK?}
+	J -- Yes --> K[Done: App and observability UIs are ready]
+	J -- No --> L[Step 9: Troubleshooting]
+	L --> H
+```
+
 ## Full Setup (From Zero)
 
 ## 1) Prerequisites
+
+Mini steps:
+
+1. Confirm Docker Desktop is running.
+2. Confirm Docker Compose v2 is available.
+3. Confirm Vault server is available (or prepare to start local dev Vault in Step 2).
+4. Install Vault CLI for easier setup and debugging.
 
 Required:
 
@@ -39,6 +65,45 @@ Required:
 - Docker Compose v2
 - Vault server running
 - Vault CLI (recommended)
+
+Accounts and credentials you should prepare before startup:
+
+- Google account for SMTP OTP delivery (`SMTP_USER`, `SMTP_PASS`)
+- Polar sandbox account for payments (`POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID`)
+- Strong app secrets (`JWT_SECRET`, `INTERNAL_SERVICE_SECRET`, `TOKEN_HASH_SECRET`)
+- Local infra/admin passwords (`MYSQL_ROOT_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`)
+
+How to prepare each prerequisite credential:
+
+1. Gmail SMTP app password (required for OTP emails)
+   1. Use a Gmail account for `SMTP_USER`.
+   2. Enable Google 2-Step Verification on that account.
+   3. Open App Passwords: https://myaccount.google.com/apppasswords
+   4. Generate a 16-character app password and use it as `SMTP_PASS`.
+   5. Do not use your normal Gmail login password.
+
+2. Polar test API key and product ID (required for paid checkout)
+   1. Log in to Polar and switch to Sandbox/Test mode.
+   2. Create a product that represents your EventZen checkout item.
+   3. Create a personal/org access token in Polar dashboard developer settings and use it as `POLAR_ACCESS_TOKEN`.
+   4. Copy the created product id and use it as `POLAR_PRODUCT_ID`.
+
+3. Generate strong secrets for JWT/internal signing
+   1. Generate values with PowerShell:
+
+```powershell
+[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+```
+
+   2. Generate separate values for:
+   - `JWT_SECRET`
+   - `INTERNAL_SERVICE_SECRET`
+   - `TOKEN_HASH_SECRET`
+
+4. Keep `.env` and Vault values aligned
+   1. Root `.env` holds infrastructure/runtime wiring values.
+   2. Vault path `secret/eventzen/ez-secrets` holds app secrets consumed at boot.
+   3. Use `vault-secrets.example.json` as the source-of-truth key list for Vault.
 
 Install Vault CLI (Windows):
 
@@ -62,6 +127,12 @@ vault --version
 
 ## 2) Start Vault (Skip if you already have one)
 
+Mini steps:
+
+1. Start Vault.
+2. Point local Vault CLI to it.
+3. Verify host and container network reachability.
+
 Quick local Vault container:
 
 ```powershell
@@ -83,6 +154,13 @@ docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:820
 ```
 
 ## 3) Prepare .env
+
+Mini steps:
+
+1. Copy `.env.example` into `.env`.
+2. Fill Vault topology values first.
+3. Fill infra/admin values.
+4. Keep wrapped token empty for now.
 
 Copy template:
 
@@ -117,6 +195,13 @@ Host tooling ports are configurable in `.env` if needed:
 
 ## 4) Put Secrets Into Vault
 
+Mini steps:
+
+1. Ensure KV v2 mount exists at `secret`.
+2. Open path `eventzen/ez-secrets`.
+3. Copy every key from `vault-secrets.example.json`.
+4. Save and re-check key spelling.
+
 Use `vault-secrets.example.json` as the required key list.
 
 Create KV mount if needed:
@@ -135,8 +220,15 @@ Rules:
 
 - Key names must match exactly.
 - Missing keys can cause service startup failure.
+- Keep mirrored keys aligned where applicable (for example, `JWT_SECRET` and `JWT__Secret`).
 
 ## 5) Generate Wrapped Token
+
+Mini steps:
+
+1. Generate a fresh wrapped token.
+2. Write it to `.env` (`VAULT_WRAPPED_SECRET_ID`).
+3. Start compose before token expiry.
 
 Option A (manual output):
 
@@ -164,6 +256,12 @@ Rules:
 
 ## 6) Start EventZen
 
+Mini steps:
+
+1. Prefer `./scripts/start-local.ps1` for first run.
+2. Wait until backend health checks pass.
+3. Confirm gateway starts last.
+
 Preferred helper:
 
 ```powershell
@@ -185,6 +283,12 @@ What startup does:
 5. Gateway starts after backend healthchecks pass.
 
 ## 7) Verify
+
+Mini steps:
+
+1. Hit `/health` through gateway.
+2. Confirm key containers are healthy.
+3. Open app and observability UIs.
 
 Health endpoint:
 

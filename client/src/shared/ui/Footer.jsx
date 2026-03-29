@@ -18,7 +18,7 @@ export default function Footer() {
               key={i}
               className="font-heading text-sm uppercase tracking-[0.3em] text-neo-yellow/80 whitespace-nowrap mx-8"
             >
-              * PLAN * CREATE * EXPERIENCE * EVENTZEN
+              * DISCOVER * BOOK * CHECK IN * EVENTZEN
             </span>
           ))}
         </div>
@@ -38,8 +38,8 @@ export default function Footer() {
               </span>
             </div>
             <p className="font-body text-sm text-neo-white/70 max-w-xs leading-relaxed">
-              Modern event management. Browse, register, manage venues,
-              track budgets - all in one place.
+              Discover events, reserve quickly, and manage everything from ticketing
+              to operations in one place.
             </p>
           </div>
 
@@ -66,7 +66,7 @@ export default function Footer() {
           {/* Info */}
           <div>
             <h4 className="font-heading text-sm uppercase tracking-wider text-neo-yellow mb-4">
-              Built With
+              Platform Stack
             </h4>
             <div className="flex flex-wrap gap-2">
               {['React', 'Vite', 'Tailwind', 'Node.js', 'Spring Boot', '.NET'].map((tech) => (
@@ -84,7 +84,7 @@ export default function Footer() {
 
         <div className="mt-10 pt-6 border-t-2 border-neo-white/10 text-center">
           <p className="font-body text-xs text-neo-white/40">
-            (c) {new Date().getFullYear()} EventZen - Capstone Project
+            (c) {new Date().getFullYear()} EventZen. Built for modern event experiences.
           </p>
         </div>
       </div>

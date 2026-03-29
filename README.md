@@ -48,8 +48,6 @@ flowchart LR
 
 ## Mermaid Diagrams
 
-GitHub supports Mermaid in Markdown. The diagrams below are synced from `mydocs/ERD.mysql.mmd` and `mydocs/ERD.mongodb.mmd`.
-
 <details>
 <summary>MySQL ERD (Spring Domain)</summary>
 
@@ -546,7 +544,3 @@ To skip Kafka integration checks:
 - Redpanda (Kafka API)
 - MinIO
 - Nginx
-
-## Implementation To-Do
-
-- CI/CD
