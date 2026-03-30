@@ -4,6 +4,11 @@ This is the fastest, most explicit setup guide for running EventZen locally with
 
 If you follow this document top to bottom, you should get a working stack on first run.
 
+> [!NOTE]
+> **Linux users:** The setup scripts (`.ps1`) require **PowerShell 7+**.
+> Install it before continuing: `sudo snap install powershell --classic`
+> or follow the [official guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-linux).
+
 ## Runtime Model (Important)
 
 EventZen startup is Vault-first:
@@ -28,6 +33,14 @@ If Vault is already running and populated, this is enough:
 ```
 
 That helper generates a fresh wrapped token and starts the stack.
+
+When the stack is up, three **test users are seeded automatically** by Docker Compose:
+
+| Email | Role | Password |
+|---|---|---|
+| `admin@ez.local` | ADMIN | `Eventzen@2026!` |
+| `vendor@ez.local` | VENDOR | `Eventzen@2026!` |
+| `user@ez.local` | CUSTOMER | `Eventzen@2026!` |
 
 ## Setup Flow (Do This In Order)
 
@@ -89,11 +102,17 @@ How to prepare each prerequisite credential:
    4. Copy the created product id and use it as `POLAR_PRODUCT_ID`.
 
 3. Generate strong secrets for JWT/internal signing
-   1. Generate values with PowerShell:
+   1. Generate values:
 
-```powershell
-[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
-```
+   **PowerShell (Windows/Linux):**
+   ```powershell
+   [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+   ```
+
+   **Bash (Linux/Mac):**
+   ```bash
+   openssl rand -base64 48
+   ```
 
    2. Generate separate values for:
    - `JWT_SECRET`
@@ -105,16 +124,24 @@ How to prepare each prerequisite credential:
    2. Vault path `secret/eventzen/ez-secrets` holds app secrets consumed at boot.
    3. Use `vault-secrets.example.json` as the source-of-truth key list for Vault.
 
-Install Vault CLI (Windows):
+Install Vault CLI:
+
+**Windows:**
 
 ```powershell
 winget install HashiCorp.Vault
+# or
+choco install vault
 ```
 
-or
+**Linux:**
 
-```powershell
-choco install vault
+```bash
+sudo apt-get install -y vault
+# or via the HashiCorp repo:
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install vault
 ```
 
 Verify tools:
@@ -246,33 +273,32 @@ Mini steps:
 4. Save and re-check key spelling.
 5. Read back the path to confirm data is written.
 
-Use `vault-secrets.example.json` as the required key list.
+Use `vault-secrets.example.json` as the required key list — every key in that file must be present in Vault.
 
-Create KV mount if needed:
+Create KV mount if missing:
 
 ```powershell
 vault secrets enable -path=secret kv-v2
 ```
 
-Then in Vault UI:
-
-1. Open KV v2 mount `secret`.
-2. Create or edit path `eventzen/ez-secrets`.
-3. Add all keys from `vault-secrets.example.json` with real values.
-
-CLI option (faster): load JSON file directly into Vault path
-
-```powershell
-vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.example.json
-```
-
-Recommended safer workflow (do not edit example in place):
+Recommended workflow — copy the example, fill in real values, then load via CLI:
 
 ```powershell
 Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
-notepad .\vault-secrets.local.json
+notepad .\vault-secrets.local.json   # or your preferred editor
 vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
 ```
+
+**Linux/bash equivalent:**
+
+```bash
+cp vault-secrets.example.json vault-secrets.local.json
+nano vault-secrets.local.json
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+```
+
+> [!NOTE]
+> You can also use the Vault UI at http://127.0.0.1:8200 — open the `secret` KV mount, create path `eventzen/ez-secrets`, and add keys manually. The CLI approach above is faster and less error-prone.
 
 Verify stored values:
 
@@ -332,6 +358,8 @@ Preferred helper:
 ./scripts/start-local.ps1
 ```
 
+This script automatically regenerates the wrapped token, writes it to `.env`, launches Docker Compose, then clears the token from `.env` for security.
+
 Manual startup:
 
 ```powershell
@@ -345,6 +373,14 @@ What startup does:
 3. Shared runtime token is written to internal volume.
 4. Node, Spring, and .NET read Vault secrets and start.
 5. Gateway starts after backend healthchecks pass.
+
+### start-local.ps1 helper flags
+
+| Flag | Effect |
+|---|---|
+| `-Detach` | Run stack in the background (`docker compose up -d`) |
+| `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
+| `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` populated in `.env` after startup |
 
 ## 7) Verify
 
@@ -476,13 +512,6 @@ Must match real topology/config:
 - Rotate secrets if exposed.
 - For production, replace root-policy workflow with least-privilege Vault policies.
 
-## Optional Helper Flags
-
-`scripts/start-local.ps1`:
-
-- `-Detach` run in background
-- `-NoBuild` skip image rebuild
-- `-KeepWrappedToken` keep wrapped token in `.env` after startup
 
 ## Minimum Success Checklist
 
