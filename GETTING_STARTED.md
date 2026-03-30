@@ -4,6 +4,11 @@ This is the fastest, most explicit setup guide for running EventZen locally with
 
 If you follow this document top to bottom, you should get a working stack on first run.
 
+> [!NOTE]
+> **Linux users:** The setup scripts (`.ps1`) require **PowerShell 7+**.
+> Install it before continuing: `sudo snap install powershell --classic`
+> or follow the [official guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-linux).
+
 ## Runtime Model (Important)
 
 EventZen startup is Vault-first:
@@ -29,9 +34,43 @@ If Vault is already running and populated, this is enough:
 
 That helper generates a fresh wrapped token and starts the stack.
 
+When the stack is up, three **test users are seeded automatically** by Docker Compose:
+
+| Email | Role | Password |
+|---|---|---|
+| `admin@ez.local` | ADMIN | `Eventzen@2026!` |
+| `vendor@ez.local` | VENDOR | `Eventzen@2026!` |
+| `user@ez.local` | CUSTOMER | `Eventzen@2026!` |
+
+## Setup Flow (Do This In Order)
+
+```mermaid
+flowchart TD
+	A[Start] --> B[Step 1: Complete prerequisites]
+	B --> C{Do you already have Vault running?}
+	C -- No --> D[Step 2: Start local Vault]
+	C -- Yes --> E[Step 2: Reuse existing Vault]
+	D --> F[Step 3: Prepare .env]
+	E --> F
+	F --> G[Step 4: Put secrets into Vault path]
+	G --> H[Step 5: Generate wrapped token]
+	H --> I[Step 6: Start EventZen]
+	I --> J{Health check OK?}
+	J -- Yes --> K[Done: App and observability UIs are ready]
+	J -- No --> L[Step 9: Troubleshooting]
+	L --> H
+```
+
 ## Full Setup (From Zero)
 
 ## 1) Prerequisites
+
+Mini steps:
+
+1. Confirm Docker Desktop is running.
+2. Confirm Docker Compose v2 is available.
+3. Confirm Vault server is available (or prepare to start local dev Vault in Step 2).
+4. Install Vault CLI for easier setup and debugging.
 
 Required:
 
@@ -40,16 +79,69 @@ Required:
 - Vault server running
 - Vault CLI (recommended)
 
-Install Vault CLI (Windows):
+Accounts and credentials you should prepare before startup:
+
+- Google account for SMTP OTP delivery (`SMTP_USER`, `SMTP_PASS`)
+- Polar sandbox account for payments (`POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID`)
+- Strong app secrets (`JWT_SECRET`, `INTERNAL_SERVICE_SECRET`, `TOKEN_HASH_SECRET`)
+- Local infra/admin passwords (`MYSQL_ROOT_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`)
+
+How to prepare each prerequisite credential:
+
+1. Gmail SMTP app password (required for OTP emails)
+   1. Use a Gmail account for `SMTP_USER`.
+   2. Enable Google 2-Step Verification on that account.
+   3. Open App Passwords: https://myaccount.google.com/apppasswords
+   4. Generate a 16-character app password and use it as `SMTP_PASS`.
+   5. Do not use your normal Gmail login password.
+
+2. Polar test API key and product ID (required for paid checkout)
+   1. Log in to Polar and switch to Sandbox/Test mode.
+   2. Create a product that represents your EventZen checkout item.
+   3. Create a personal/org access token in Polar dashboard developer settings and use it as `POLAR_ACCESS_TOKEN`.
+   4. Copy the created product id and use it as `POLAR_PRODUCT_ID`.
+
+3. Generate strong secrets for JWT/internal signing
+   1. Generate values:
+
+   **PowerShell (Windows/Linux):**
+   ```powershell
+   [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+   ```
+
+   **Bash (Linux/Mac):**
+   ```bash
+   openssl rand -base64 48
+   ```
+
+   2. Generate separate values for:
+   - `JWT_SECRET`
+   - `INTERNAL_SERVICE_SECRET`
+   - `TOKEN_HASH_SECRET`
+
+4. Keep `.env` and Vault values aligned
+   1. Root `.env` holds infrastructure/runtime wiring values.
+   2. Vault path `secret/eventzen/ez-secrets` holds app secrets consumed at boot.
+   3. Use `vault-secrets.example.json` as the source-of-truth key list for Vault.
+
+Install Vault CLI:
+
+**Windows:**
 
 ```powershell
 winget install HashiCorp.Vault
+# or
+choco install vault
 ```
 
-or
+**Linux:**
 
-```powershell
-choco install vault
+```bash
+sudo apt-get install -y vault
+# or via the HashiCorp repo:
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install vault
 ```
 
 Verify tools:
@@ -62,11 +154,31 @@ vault --version
 
 ## 2) Start Vault (Skip if you already have one)
 
+Mini steps:
+
+1. Start Vault.
+2. Point local Vault CLI to it.
+3. Verify host and container network reachability.
+4. Verify token login and KV mount access before moving forward.
+
+Choose one mode:
+
+- Mode A: Dockerized Vault (container)
+- Mode B: External Vault process on this same machine (non-Docker)
+
 Quick local Vault container:
 
 ```powershell
 docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
 ```
+
+External Vault process on host (Windows PowerShell):
+
+```powershell
+vault server -dev -dev-root-token-id="root-dev-token" -dev-listen-address="0.0.0.0:8200"
+```
+
+Keep that terminal running while you work.
 
 Configure CLI environment:
 
@@ -76,13 +188,49 @@ $env:VAULT_TOKEN = "root-dev-token"
 vault status
 ```
 
+If you are using external Vault on a different host port, update both values:
+
+```dotenv
+VAULT_ADDR=http://127.0.0.1:<your-port>
+VAULT_DOCKER_ADDR=http://host.docker.internal:<your-port>
+```
+
+If the container already exists but is stopped:
+
+```powershell
+docker start eventzen-vault
+```
+
+If you get `connectex: actively refused` on port 8200:
+
+1. Start Docker Desktop first.
+2. Re-run `docker start eventzen-vault` or the `docker run ...` command above.
+3. Re-check with `vault status`.
+
 Verify containers can reach Vault:
 
 ```powershell
 docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
 ```
 
+For a custom external Vault port, replace `8200` in the command above.
+
+Verify Vault token and KV visibility:
+
+```powershell
+vault token lookup
+vault secrets list
+vault kv list secret/
+```
+
 ## 3) Prepare .env
+
+Mini steps:
+
+1. Copy `.env.example` into `.env`.
+2. Fill Vault topology values first.
+3. Fill infra/admin values.
+4. Keep wrapped token empty for now.
 
 Copy template:
 
@@ -117,26 +265,60 @@ Host tooling ports are configurable in `.env` if needed:
 
 ## 4) Put Secrets Into Vault
 
-Use `vault-secrets.example.json` as the required key list.
+Mini steps:
 
-Create KV mount if needed:
+1. Ensure KV v2 mount exists at `secret`.
+2. Open path `eventzen/ez-secrets`.
+3. Copy every key from `vault-secrets.example.json`.
+4. Save and re-check key spelling.
+5. Read back the path to confirm data is written.
+
+Use `vault-secrets.example.json` as the required key list — every key in that file must be present in Vault.
+
+Create KV mount if missing:
 
 ```powershell
 vault secrets enable -path=secret kv-v2
 ```
 
-Then in Vault UI:
+Recommended workflow — copy the example, fill in real values, then load via CLI:
 
-1. Open KV v2 mount `secret`.
-2. Create or edit path `eventzen/ez-secrets`.
-3. Add all keys from `vault-secrets.example.json` with real values.
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+notepad .\vault-secrets.local.json   # or your preferred editor
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+```
+
+**Linux/bash equivalent:**
+
+```bash
+cp vault-secrets.example.json vault-secrets.local.json
+nano vault-secrets.local.json
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+```
+
+> [!NOTE]
+> You can also use the Vault UI at http://127.0.0.1:8200 — open the `secret` KV mount, create path `eventzen/ez-secrets`, and add keys manually. The CLI approach above is faster and less error-prone.
+
+Verify stored values:
+
+```powershell
+vault kv get -mount=secret eventzen/ez-secrets
+```
 
 Rules:
 
 - Key names must match exactly.
 - Missing keys can cause service startup failure.
+- Keep mirrored keys aligned where applicable (for example, `JWT_SECRET` and `JWT__Secret`).
 
 ## 5) Generate Wrapped Token
+
+Mini steps:
+
+1. Generate a fresh wrapped token.
+2. Write it to `.env` (`VAULT_WRAPPED_SECRET_ID`).
+3. Start compose before token expiry.
 
 Option A (manual output):
 
@@ -164,11 +346,19 @@ Rules:
 
 ## 6) Start EventZen
 
+Mini steps:
+
+1. Prefer `./scripts/start-local.ps1` for first run.
+2. Wait until backend health checks pass.
+3. Confirm gateway starts last.
+
 Preferred helper:
 
 ```powershell
 ./scripts/start-local.ps1
 ```
+
+This script automatically regenerates the wrapped token, writes it to `.env`, launches Docker Compose, then clears the token from `.env` for security.
 
 Manual startup:
 
@@ -184,12 +374,26 @@ What startup does:
 4. Node, Spring, and .NET read Vault secrets and start.
 5. Gateway starts after backend healthchecks pass.
 
+### start-local.ps1 helper flags
+
+| Flag | Effect |
+|---|---|
+| `-Detach` | Run stack in the background (`docker compose up -d`) |
+| `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
+| `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` populated in `.env` after startup |
+
 ## 7) Verify
+
+Mini steps:
+
+1. Hit `/health` through gateway.
+2. Confirm key containers are healthy.
+3. Open app and observability UIs.
 
 Health endpoint:
 
 ```powershell
-curl http://localhost:8080/health
+curl.exe -fsS http://localhost:8080/health
 ```
 
 Container status:
@@ -208,9 +412,15 @@ Expected key services:
 Useful UIs:
 
 - App: http://localhost:8080
+- Swagger UI: http://localhost:8080/swagger/
+- OpenAPI YAML: http://localhost:8080/openapi/eventzen-aggregated.yaml
 - Grafana: http://localhost:3000
 - Prometheus: http://localhost:9090
 - MinIO Console: http://localhost:9001
+
+Quick API test asset:
+
+- Root Postman collection: `EventZen_Full_Application.postman_collection.json`
 
 ## 8) Stop / Reset
 
@@ -254,6 +464,22 @@ Common failure: Vault not reachable from containers
 docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
 ```
 
+Common failure: Vault login/token issues
+
+- Check:
+
+```powershell
+vault status
+vault token lookup
+```
+
+- Re-authenticate for local dev container:
+
+```powershell
+$env:VAULT_ADDR = "http://127.0.0.1:8200"
+vault login root-dev-token
+```
+
 Common failure: app services never start
 
 - Usually blocked behind failed `vault-secrets-init`
@@ -286,13 +512,6 @@ Must match real topology/config:
 - Rotate secrets if exposed.
 - For production, replace root-policy workflow with least-privilege Vault policies.
 
-## Optional Helper Flags
-
-`scripts/start-local.ps1`:
-
-- `-Detach` run in background
-- `-NoBuild` skip image rebuild
-- `-KeepWrappedToken` keep wrapped token in `.env` after startup
 
 ## Minimum Success Checklist
 

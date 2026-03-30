@@ -1,0 +1,370 @@
+openapi: 3.0.3
+info:
+  title: EventZen Unified Gateway API
+  version: 1.0.0
+  description: |
+    Aggregated OpenAPI for EventZen services routed through the gateway.
+    Includes Node, Spring, and .NET endpoints exposed via http://localhost:8080.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Gateway
+  - name: Auth
+  - name: Users
+  - name: Attendees
+  - name: Notifications
+  - name: Internal
+  - name: Vendor Applications
+  - name: Uploads
+  - name: Reviews
+  - name: Payments
+  - name: Events
+  - name: Venues
+  - name: Schedule
+  - name: Budget
+  - name: Reports
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [Gateway]
+      security: []
+      summary: Gateway health check
+      responses:
+        '200': { description: OK }
+
+  /api/auth/register:
+    post: { tags: [Auth], security: [], summary: Register user, responses: { '201': { description: Created } } }
+  /api/auth/verify-email:
+    post: { tags: [Auth], security: [], summary: Verify OTP and activate account, responses: { '200': { description: OK } } }
+  /api/auth/resend-otp:
+    post: { tags: [Auth], security: [], summary: Resend verification OTP, responses: { '200': { description: OK } } }
+  /api/auth/login:
+    post: { tags: [Auth], security: [], summary: Login and issue tokens, responses: { '200': { description: OK } } }
+  /api/auth/refresh:
+    post: { tags: [Auth], security: [], summary: Refresh access token, responses: { '200': { description: OK } } }
+  /api/auth/forgot-password:
+    post: { tags: [Auth], security: [], summary: Request password reset email, responses: { '200': { description: OK } } }
+  /api/auth/reset-password:
+    post: { tags: [Auth], security: [], summary: Reset password with token, responses: { '200': { description: OK } } }
+  /api/auth/logout:
+    delete: { tags: [Auth], security: [], summary: Logout and invalidate refresh token, responses: { '204': { description: No Content } } }
+  /api/auth/me:
+    get: { tags: [Auth], summary: Get current user profile, responses: { '200': { description: OK } } }
+    put: { tags: [Auth], summary: Update current user profile, responses: { '200': { description: OK } } }
+  /api/auth/me/email-change/request:
+    post: { tags: [Auth], summary: Request email change OTP, responses: { '200': { description: OK } } }
+  /api/auth/me/email-change/confirm:
+    post: { tags: [Auth], summary: Confirm email change OTP, responses: { '200': { description: OK } } }
+
+  /api/users:
+    get:
+      tags: [Users]
+      security: [{ bearerAuth: [] }]
+      summary: List users (admin)
+      responses: { '200': { description: OK } }
+  /api/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    delete:
+      tags: [Users]
+      summary: Delete user (admin)
+      responses: { '204': { description: No Content } }
+  /api/users/{id}/role:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Users]
+      summary: Change user role (admin)
+      responses: { '200': { description: OK } }
+
+  /api/attendees/register:
+    post: { tags: [Attendees], summary: Register attendee tickets, responses: { '201': { description: Created } } }
+  /api/attendees/my:
+    get: { tags: [Attendees], summary: Get my registrations, responses: { '200': { description: OK } } }
+  /api/attendees/{id}:
+    parameters: [ { $ref: '#/components/parameters/RegistrationId' } ]
+    delete: { tags: [Attendees], summary: Cancel my registration, responses: { '204': { description: No Content } } }
+  /api/attendees/event/{eventId}/count:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Attendees], security: [], summary: Tier-wise attendee counts, responses: { '200': { description: OK } } }
+  /api/attendees/event/{eventId}/waitlist-count:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Attendees], security: [], summary: Tier-wise waitlist counts, responses: { '200': { description: OK } } }
+  /api/attendees/event/{eventId}:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Attendees], summary: Get attendees for event (vendor/admin), responses: { '200': { description: OK } } }
+  /api/attendees/event/{eventId}/export:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Attendees], summary: Export attendees CSV, responses: { '200': { description: OK } } }
+  /api/attendees/events/counts:
+    post: { tags: [Attendees], summary: Bulk attendee counts by event IDs, responses: { '200': { description: OK } } }
+  /api/attendees/checkin:
+    post: { tags: [Attendees], summary: Check in attendee (vendor/admin), responses: { '200': { description: OK } } }
+
+  /api/notifications:
+    get: { tags: [Notifications], summary: List my notifications, responses: { '200': { description: OK } } }
+  /api/notifications/unread-count:
+    get: { tags: [Notifications], summary: Get unread count, responses: { '200': { description: OK } } }
+  /api/notifications/stream:
+    get: { tags: [Notifications], summary: SSE stream for notifications, responses: { '200': { description: OK } } }
+  /api/notifications/read-all:
+    patch: { tags: [Notifications], summary: Mark all as read, responses: { '200': { description: OK } } }
+  /api/notifications/{id}/read:
+    parameters: [ { $ref: '#/components/parameters/NotificationId' } ]
+    patch: { tags: [Notifications], summary: Mark notification as read, responses: { '200': { description: OK } } }
+
+  /api/internal/events/{eventId}/cancel-registrations:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Cancel registrations for cancelled event
+      responses: { '200': { description: OK } }
+  /api/internal/payments/platform-fee-aggregates:
+    post:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Platform-fee aggregates per event
+      responses: { '200': { description: OK } }
+  /api/internal/notifications/events/{eventId}/pending-approval:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Emit pending-approval notification
+      responses: { '200': { description: OK } }
+  /api/internal/notifications/events/{eventId}/status:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Emit status-change notification
+      responses: { '200': { description: OK } }
+  /api/internal/vendors/{userId}/profile:
+    parameters: [ { $ref: '#/components/parameters/VendorUserId' } ]
+    get:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Get vendor display profile
+      responses: { '200': { description: OK } }
+  /api/internal/events/{id}/rating:
+    parameters: [ { $ref: '#/components/parameters/EventIdInternal' } ]
+    patch:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Update denormalized event rating
+      responses: { '200': { description: OK } }
+  /api/internal/events/{id}/ownership:
+    parameters: [ { $ref: '#/components/parameters/EventIdInternal' } ]
+    get:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Get event ownership metadata
+      responses: { '200': { description: OK } }
+  /api/internal/venue-bookings/events/{eventId}/latest-confirmed:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get:
+      tags: [Internal]
+      security: [{ internalSecret: [] }]
+      summary: Get latest confirmed booking allocation
+      responses: { '200': { description: OK } }
+
+  /api/vendor-applications:
+    post: { tags: [Vendor Applications], summary: Submit vendor application, responses: { '201': { description: Created } } }
+  /api/vendor-applications/me:
+    get: { tags: [Vendor Applications], summary: Get my vendor applications, responses: { '200': { description: OK } } }
+  /api/admin/vendor-applications:
+    get: { tags: [Vendor Applications], summary: List vendor applications (admin), responses: { '200': { description: OK } } }
+  /api/admin/vendor-applications/{id}/status:
+    parameters: [ { $ref: '#/components/parameters/ApplicationId' } ]
+    patch: { tags: [Vendor Applications], summary: Approve/reject application (admin), responses: { '200': { description: OK } } }
+
+  /api/uploads/config:
+    get: { tags: [Uploads], security: [], summary: Get upload config, responses: { '200': { description: OK } } }
+  /api/uploads/image:
+    post: { tags: [Uploads], summary: Upload image, responses: { '201': { description: Created } } }
+  /api/uploads/delete:
+    delete: { tags: [Uploads], summary: Delete uploaded image, responses: { '200': { description: OK } } }
+
+  /api/reviews:
+    post: { tags: [Reviews], summary: Legacy mixed create endpoint, responses: { '201': { description: Created } } }
+  /api/reviews/comments:
+    post: { tags: [Reviews], summary: Create event comment, responses: { '201': { description: Created } } }
+  /api/reviews/event/{eventId}:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Reviews], security: [], summary: List public comments for event, responses: { '200': { description: OK } } }
+  /api/reviews/event/{eventId}/rating/summary:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Reviews], security: [], summary: Get event rating summary, responses: { '200': { description: OK } } }
+  /api/reviews/event/{eventId}/rating/mine:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Reviews], summary: Get my rating, responses: { '200': { description: OK } } }
+  /api/reviews/event/{eventId}/rating:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    put: { tags: [Reviews], summary: Upsert my rating, responses: { '200': { description: OK } } }
+  /api/reviews/event/{eventId}/mine:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Reviews], summary: Backward-compatible alias for my rating, responses: { '200': { description: OK } } }
+  /api/reviews/{id}:
+    parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+    put: { tags: [Reviews], summary: Update my comment entry, responses: { '200': { description: OK } } }
+    delete: { tags: [Reviews], summary: Delete my review/comment entry, responses: { '204': { description: No Content } } }
+
+  /api/payments/status/{orderId}:
+    parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+    get: { tags: [Payments], summary: Get payment status, responses: { '200': { description: OK } } }
+  /api/payments/status/{orderId}/invoice:
+    parameters: [ { $ref: '#/components/parameters/OrderId' } ]
+    post: { tags: [Payments], summary: Generate invoice, responses: { '201': { description: Created } } }
+    get: { tags: [Payments], summary: Fetch generated invoice, responses: { '200': { description: OK } } }
+  /api/payments/webhook/polar:
+    post: { tags: [Payments], security: [], summary: Polar payment webhook callback, responses: { '200': { description: OK } } }
+
+  /api/events:
+    get: { tags: [Events], security: [], summary: List events with filters, responses: { '200': { description: OK } } }
+    post: { tags: [Events], summary: Create event (vendor/admin), responses: { '201': { description: Created } } }
+  /api/events/{id}:
+    parameters: [ { $ref: '#/components/parameters/EventIdInternal' } ]
+    get: { tags: [Events], security: [], summary: Get event details, responses: { '200': { description: OK } } }
+    put: { tags: [Events], summary: Update event (vendor/admin), responses: { '200': { description: OK } } }
+    delete: { tags: [Events], summary: Soft-cancel event, responses: { '200': { description: OK } } }
+  /api/events/{id}/submit:
+    parameters: [ { $ref: '#/components/parameters/EventIdInternal' } ]
+    post: { tags: [Events], summary: Submit event for approval (vendor), responses: { '200': { description: OK } } }
+  /api/events/{id}/status:
+    parameters: [ { $ref: '#/components/parameters/EventIdInternal' } ]
+    patch: { tags: [Events], summary: Change event status (admin), responses: { '200': { description: OK } } }
+
+  /api/venues:
+    get: { tags: [Venues], security: [], summary: List venues, responses: { '200': { description: OK } } }
+    post: { tags: [Venues], summary: Create venue (admin), responses: { '201': { description: Created } } }
+  /api/venues/{id}:
+    parameters: [ { $ref: '#/components/parameters/VenueId' } ]
+    get: { tags: [Venues], security: [], summary: Get venue details, responses: { '200': { description: OK } } }
+    put: { tags: [Venues], summary: Update venue (admin), responses: { '200': { description: OK } } }
+    delete: { tags: [Venues], summary: Delete venue (admin), responses: { '204': { description: No Content } } }
+  /api/venues/{id}/availability:
+    parameters: [ { $ref: '#/components/parameters/VenueId' } ]
+    get: { tags: [Venues], security: [], summary: Get venue availability slots, responses: { '200': { description: OK } } }
+  /api/venues/availability/bulk:
+    get: { tags: [Venues], security: [], summary: Bulk venue availability, responses: { '200': { description: OK } } }
+  /api/venues/{id}/bookings:
+    parameters: [ { $ref: '#/components/parameters/VenueId' } ]
+    post: { tags: [Venues], summary: Create venue booking (vendor/admin), responses: { '201': { description: Created } } }
+    get: { tags: [Venues], summary: List venue bookings (vendor/admin), responses: { '200': { description: OK } } }
+  /api/venues/bookings/{id}:
+    parameters: [ { $ref: '#/components/parameters/BookingId' } ]
+    delete: { tags: [Venues], summary: Cancel venue booking, responses: { '204': { description: No Content } } }
+
+  /api/schedule/{eventId}:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Schedule], security: [], summary: List agenda slots, responses: { '200': { description: OK } } }
+    post: { tags: [Schedule], summary: Add schedule slot (vendor/admin), responses: { '201': { description: Created } } }
+  /api/schedule/slot/{slotId}:
+    parameters: [ { $ref: '#/components/parameters/SlotId' } ]
+    put: { tags: [Schedule], summary: Update schedule slot (vendor/admin), responses: { '200': { description: OK } } }
+    delete: { tags: [Schedule], summary: Delete schedule slot (vendor/admin), responses: { '204': { description: No Content } } }
+
+  /api/budget/events/{eventId}:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post: { tags: [Budget], summary: Create budget (vendor/admin), responses: { '201': { description: Created } } }
+    get: { tags: [Budget], summary: Get budget summary (vendor/admin), responses: { '200': { description: OK } } }
+    put: { tags: [Budget], summary: Update budget allocation (vendor/admin), responses: { '200': { description: OK } } }
+  /api/budget/events/{eventId}/expenses:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post: { tags: [Budget], summary: Add expense (vendor/admin), responses: { '201': { description: Created } } }
+    get: { tags: [Budget], summary: List expenses for event budget, responses: { '200': { description: OK } } }
+  /api/budget/expenses/{id}:
+    parameters: [ { $ref: '#/components/parameters/ExpenseId' } ]
+    put: { tags: [Budget], summary: Update expense, responses: { '200': { description: OK } } }
+    delete: { tags: [Budget], summary: Delete expense, responses: { '204': { description: No Content } } }
+
+  /api/reports/events/{eventId}:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    get: { tags: [Reports], summary: Get event financial report, responses: { '200': { description: OK } } }
+  /api/reports/vendor/events:
+    get: { tags: [Reports], summary: Vendor report overview, responses: { '200': { description: OK } } }
+  /api/reports/admin/events:
+    get: { tags: [Reports], summary: Admin report overview, responses: { '200': { description: OK } } }
+  /api/reports/admin/events/{eventId}/reconcile-venue-allocation:
+    parameters: [ { $ref: '#/components/parameters/EventId' } ]
+    post: { tags: [Reports], summary: Reconcile venue allocation (admin), responses: { '200': { description: OK } } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalSecret:
+      type: apiKey
+      in: header
+      name: X-Internal-Secret
+  parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: string }
+    EventIdInternal:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    VendorUserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    RegistrationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    NotificationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ReviewId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string }
+    VenueId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    BookingId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SlotId:
+      name: slotId
+      in: path
+      required: true
+      schema: { type: string }
+    ExpenseId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }

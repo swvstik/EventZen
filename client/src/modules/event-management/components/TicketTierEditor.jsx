@@ -64,6 +64,9 @@ export default function TicketTierEditor({ control, register, errors, capacityEr
                   className="neo-input"
                   placeholder="Price"
                 />
+                <p className="mt-1 text-[11px] text-neo-black/65">
+                  Paid checkout via Polar fails for INR prices below 60.
+                </p>
               </div>
               <div>
                 <label htmlFor={`ticket-tier-capacity-${i}`} className="neo-label mb-1">Capacity</label>

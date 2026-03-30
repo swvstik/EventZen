@@ -21,3 +21,7 @@ Thumbs.db
 .fake
 
 **/mydocs/
+
+
+# Ignore temporary coverage artifacts created during tests
+server/backend-node/coverage/tmp/

@@ -11,6 +11,26 @@ namespace EventZen.Budget.Tests;
 public class BudgetServiceTests
 {
     [Fact]
+    public async Task CreateBudgetAsync_RejectsUserRole()
+    {
+        var service = new BudgetService(
+            new FakeBudgetRepository(existingByEventId: null),
+            new FakeExpenseRepository(),
+            new FakeEventOwnershipService(new EventOwnershipInfo("event-1", "vendor-1", "Owned Event", "PUBLISHED")),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
+
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
+            service.CreateBudgetAsync(
+                "event-1",
+                new CreateBudgetRequest(1000m, "INR"),
+                userId: "user-1",
+                role: "USER"));
+
+        Assert.Contains("VENDOR or ADMIN", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_SetsOverspendWarning_WhenSpentExceedsNinetyPercent()
     {
         var budget = new EventBudget
@@ -42,6 +62,37 @@ public class BudgetServiceTests
         Assert.Equal(50m, summary.Remaining);
         Assert.True(summary.OverspendWarning);
         Assert.Equal(95.0, summary.PercentUsed);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_DoesNotSetOverspendWarning_WhenSpentIsExactlyNinetyPercent()
+    {
+        var budget = new EventBudget
+        {
+            Id = "b-1",
+            EventId = "event-1",
+            TotalAllocated = 1000m,
+            Currency = "INR",
+            CreatedByUserId = "vendor-1",
+            OwnerVendorUserId = "vendor-1",
+        };
+
+        var expenses = new List<Expense>
+        {
+            new() { Id = "e-1", BudgetId = "b-1", Amount = 900m, Category = ExpenseCategory.VENUE, Description = "Venue", AddedByUserId = "vendor-1", ExpenseDate = DateTime.UtcNow },
+        };
+
+        var service = new BudgetService(
+            new FakeBudgetRepository(budget),
+            new FakeExpenseRepository(expenses),
+            new FakeEventOwnershipService(),
+            new FakePaymentMetricsService(),
+            new FakeVenueBookingAllocationService());
+
+        var summary = await service.GetSummaryAsync("event-1", "vendor-1", "VENDOR");
+
+        Assert.Equal(90.0, summary.PercentUsed);
+        Assert.False(summary.OverspendWarning);
     }
 
     [Fact]

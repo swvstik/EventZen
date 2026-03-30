@@ -50,26 +50,26 @@ const HERO_ROTATION_IMAGES = [eventPicB, eventPicA, eventPicC, eventPicD, eventP
 const OFFER_CARDS = [
   {
     icon: HiSparkles,
-    title: 'Find your event style quickly',
-    desc: 'Discover based on vibe, date, and location without digging through noisy listings.',
+    title: 'Find events that fit your vibe',
+    desc: 'Filter by date, location, and category to find the right event fast.',
     accent: 'landing-accent-mint',
   },
   {
     icon: HiCalendar,
-    title: 'Book in one clear flow',
-    desc: 'Register, secure your ticket, and keep your check-in pass ready in one place.',
+    title: 'Book in one smooth flow',
+    desc: 'Choose your tier, confirm details, and keep your entry pass ready.',
     accent: 'landing-accent-teal',
   },
   {
     icon: HiClock,
-    title: 'Get only useful updates',
-    desc: 'Receive reminders and event changes when they matter instead of random spam.',
+    title: 'Stay updated without spam',
+    desc: 'Get timely reminders and important event updates only.',
     accent: 'landing-accent-cyan',
   },
   {
     icon: HiUsers,
-    title: 'Scale with your team',
-    desc: 'Start attendee-first, then grow into organizer and vendor workflows smoothly.',
+    title: 'Loved by attendees and vendors.',
+    desc: 'Event management, optimized. For attendees and vendors alike.',
     accent: 'landing-accent-sky',
   },
 ];
@@ -78,23 +78,23 @@ const HOW_IT_WORKS = [
   {
     step: '01',
     title: 'Discover',
-    desc: 'Browse events with clean filters and real context before you commit.',
+    desc: 'Find the right event with clear filters and key details upfront.',
   },
   {
     step: '02',
     title: 'Reserve',
-    desc: 'Pick your ticket tier, confirm details, and lock in your entry.',
+    desc: 'Pick your tier, confirm, and reserve your spot instantly.',
   },
   {
     step: '03',
     title: 'Check In',
-    desc: 'Show your QR pass at the gate and enjoy the event with less friction.',
+    desc: 'Show your QR code at entry and skip the queue stress.',
   },
 ];
 
 const TESTIMONIALS = [
   {
-    name: 'Diptodeep',
+    name: 'Kanye Southeast',
     role: 'Concert Addict',
     quote:
       'I opened EventZen once, picked an event in minutes, and never went back to any other service.',
@@ -196,10 +196,10 @@ export default function LandingPage() {
   const [venuesRef, venuesCount] = useCounter(780);
 
   const stats = [
-    { ref: ticketsRef, value: ticketsCount, label: 'Tickets Booked', suffix: '+' },
-    { ref: usersRef, value: usersCount, label: 'Active Members', suffix: '+' },
-    { ref: eventsRef, value: eventsCount, label: 'Events Listed', suffix: '+' },
-    { ref: venuesRef, value: venuesCount, label: 'Venue Partners', suffix: '+' },
+    { ref: ticketsRef, value: ticketsCount, label: 'Bought Tickets', suffix: '+' },
+    { ref: usersRef, value: usersCount, label: 'Active Users', suffix: '+' },
+    { ref: eventsRef, value: eventsCount, label: 'Live Events', suffix: '+' },
+    { ref: venuesRef, value: venuesCount, label: 'Partner Venues', suffix: '+' },
   ];
 
   const offerNotes = useMemo(() => seededNotes(20260322, 12), []);
@@ -218,7 +218,7 @@ export default function LandingPage() {
             <div className="grid items-center gap-12 lg:grid-cols-[1.06fr_0.94fr]">
               <motion.div>
                 <span className="neo-badge bg-neo-black text-neo-yellow mb-5">
-                  {isAuthenticated ? 'Welcome back' : 'Built-in event flow'}
+                  {isAuthenticated ? 'Welcome back' : 'Your next event, sorted'}
                 </span>
 
                 <h1 className="font-heading-shade text-3xl sm:text-4xl md:text-5xl lg:text-6xl leading-[0.98] mb-4">
@@ -228,45 +228,46 @@ export default function LandingPage() {
                       <br />
                       {(user?.name || 'EventZen user').split(' ')[0]}.
                       <br />
-                      <span className="landing-hero-highlight">Find your next event.</span>
+                      <span className="landing-hero-highlight">Pick your next plan.</span>
                     </>
                   ) : (
                     <>
-                      Plan fast.
+                      Discover.
                       <br />
-                      Show up ready.
+                      Book in minutes.
                       <br />
-                      <span className="landing-hero-highlight">Enjoy the event.</span>
+                      <span className="landing-hero-highlight">Enjoy.</span>
                     </>
                   )}
                 </h1>
 
                 <p className="font-body text-sm md:text-[15px] text-gray-700 max-w-xl mb-7 leading-relaxed">
                   {isAuthenticated
-                    ? 'Jump back in, check upcoming experiences, and manage registrations with less friction.'
-                    : 'Discover what matters, reserve quickly, and arrive ready with QR check-in. EventZen starts with attendee clarity and scales into organizer workflows when your team is ready.'}
+                    ? 'See what is coming up, keep your passes ready, and manage your plans in one place.'
+                    : 'Discover events you actually care about, reserve your spot in a few clicks, and keep your QR check-in ready.'}
                 </p>
 
                 <div className="flex flex-wrap gap-4">
                   <Link to="/events" className="neo-btn neo-btn-lg landing-btn-main group">
-                    {isAuthenticated ? 'More Events' : 'Browse Events'}
+                    Explore Events
                     <HiArrowRight className="group-hover:translate-x-1 transition-transform" />
                   </Link>
                   {isAuthenticated ? (
                     <Link to="/dashboard" className="neo-btn neo-btn-lg bg-neo-white">
-                      Go to Dashboard
+                      Open Dashboard
                     </Link>
                   ) : (
                     <Link to="/register" className="neo-btn neo-btn-lg bg-neo-white">
-                      Join EventZen
+                      Create Account
+                      <HiArrowRight className="group-hover:translate-x-1 transition-transform" />
                     </Link>
                   )}
                 </div>
 
                 <div className="mt-8 grid grid-cols-3 gap-1.5 sm:gap-2 max-w-2xl">
-                  <span className="neo-badge bg-neo-white text-neo-black justify-center whitespace-nowrap px-1.5 py-1 text-[8px] tracking-[0.08em] sm:px-3 sm:text-[10px] sm:tracking-widest">QR check-in</span>
+                  <span className="neo-badge bg-neo-white text-neo-black justify-center whitespace-nowrap px-1.5 py-1 text-[8px] tracking-[0.08em] sm:px-3 sm:text-[10px] sm:tracking-widest">QR Entry</span>
                   <span className="neo-badge bg-neo-white text-neo-black justify-center whitespace-nowrap px-1.5 py-1 text-[8px] tracking-[0.08em] sm:px-3 sm:text-[10px] sm:tracking-widest">Reminders</span>
-                  <span className="neo-badge bg-neo-white text-neo-black justify-center whitespace-nowrap px-1.5 py-1 text-[8px] tracking-[0.08em] sm:px-3 sm:text-[10px] sm:tracking-widest">Venue-safe</span>
+                  <span className="neo-badge bg-neo-white text-neo-black justify-center whitespace-nowrap px-1.5 py-1 text-[8px] tracking-[0.08em] sm:px-3 sm:text-[10px] sm:tracking-widest">Scheduling</span>
                 </div>
               </motion.div>
 
@@ -296,9 +297,12 @@ export default function LandingPage() {
                       />
                     </AnimatePresence>
                   </div>
-                  <p className="font-heading text-[11px] uppercase tracking-[0.18em] mt-3 px-2 pb-1">
-                    Real moments from the EventZen community
-                  </p>
+                  {/* Move the "Real moments..." text to the right */}
+                  <div className="flex justify-end">
+                    <p className="font-heading text-[11px] uppercase tracking-[0.18em] mt-3 px-2 pb-1">
+                      Real moments from EventZen events
+                    </p>
+                  </div>
                 </div>
 
                 <div className="hidden lg:block absolute -bottom-9 -left-9 w-40 md:w-44 neo-card p-2 bg-[#ffb347] rotate-[-6deg]">
@@ -391,12 +395,12 @@ export default function LandingPage() {
             transition={{ duration: 0.4 }}
             className="text-center mb-14"
           >
-            <span className="neo-badge bg-neo-yellow text-neo-black mb-4 inline-flex">What you get</span>
+            <span className="neo-badge bg-neo-yellow text-neo-black mb-4 inline-flex">Why people choose EventZen</span>
             <h2 className="font-heading text-3xl md:text-4xl uppercase tracking-wider mb-4">
-              Built for attendees before everything else
+              Everything you need to go from maybe to booked
             </h2>
             <p className="font-body text-gray-700 max-w-3xl mx-auto leading-relaxed">
-              Clear experience first, then deeper tooling when your role expands.
+              Start as an attendee, scale into organizer workflows when you need more control.
             </p>
           </motion.div>
 
@@ -444,18 +448,17 @@ export default function LandingPage() {
               viewport={{ once: true, amount: 0.35 }}
               transition={{ duration: 0.45 }}
             >
-              <span className="neo-badge bg-neo-black text-neo-yellow mb-4 inline-flex">Why EventZen</span>
+              <span className="neo-badge bg-neo-black text-neo-yellow mb-4 inline-flex">Why EventZen works</span>
               <h2 className="font-heading text-2xl md:text-3xl uppercase tracking-wider mb-5">
-                Clear event flow from first click to front gate
+                From discovery to entry, everything stays clear
               </h2>
               <p className="font-body text-gray-800 leading-relaxed mb-6">
-                Most event products feel admin-first. EventZen stays attendee-first while still
-                supporting deeper operations in the same product.
+                Most platforms feel complicated too early. EventZen keeps booking simple while still supporting advanced event operations.
               </p>
 
               <ul className="space-y-3 font-body text-sm md:text-base text-gray-800">
-                <li>Venue-aware scheduling reduces avoidable clashes.</li>
-                <li>Reminder timing is tuned to event reality, not noise.</li>
+                <li>Venue-aware scheduling helps prevent avoidable clashes.</li>
+                <li>Reminders are timed to be useful, not distracting.</li>
                 <li>Organizer and vendor capabilities unlock when needed.</li>
               </ul>
             </motion.div>
@@ -479,19 +482,19 @@ export default function LandingPage() {
           </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 min-[360px]:gap-3 sm:gap-4">
             {stats.map((stat) => (
               <motion.div
                 key={stat.label}
                 ref={stat.ref}
                 whileHover={{ y: -4, rotate: [-1, 1, 0] }}
-                className="landing-panel p-3 sm:p-5 text-center shadow-neo-sm md:shadow-neo-xl"
+                className="landing-panel p-2.5 min-[360px]:p-3 sm:p-5 text-center shadow-neo-sm md:shadow-neo-xl"
               >
-                <p className="font-heading-shade text-[1.8rem] sm:text-3xl md:text-4xl mb-1 sm:mb-2 leading-none">
+                <p className="font-heading-shade text-[1.35rem] min-[360px]:text-[1.55rem] sm:text-3xl md:text-4xl mb-1 sm:mb-2 leading-none whitespace-nowrap">
                   {stat.value.toLocaleString()}
                   {stat.suffix}
                 </p>
-                <p className="font-heading text-[10px] sm:text-[11px] md:text-xs uppercase tracking-[0.08em] sm:tracking-wider text-gray-700 leading-tight">
+                <p className="font-heading text-[9px] min-[360px]:text-[10px] sm:text-[11px] md:text-xs uppercase tracking-[0.04em] min-[360px]:tracking-[0.08em] sm:tracking-wider text-gray-700 leading-tight">
                   {stat.label}
                 </p>
               </motion.div>
@@ -530,10 +533,10 @@ export default function LandingPage() {
           >
             <span className="neo-badge bg-neo-yellow text-neo-black mb-4 inline-flex">How it works</span>
             <h2 className="font-heading text-3xl md:text-4xl uppercase tracking-wider mb-4">
-              Step by step, in order
+              Three steps. No confusion.
             </h2>
             <p className="font-body text-gray-700 max-w-2xl mx-auto leading-relaxed">
-              No chaos. Just clear progression from discovery to check-in.
+              Find, book, and check in without the usual event-day friction.
             </p>
           </motion.div>
 

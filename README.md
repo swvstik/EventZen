@@ -1,25 +1,231 @@
-# EventZen
+<div align="center">
 
-EventZen is a polyglot event management platform built as a microservices system.
-It combines a React frontend with Node.js, Spring Boot, and ASP.NET Core services
-behind a single Nginx gateway.
+# EventZen - Capstone Project
+
+**A polyglot event management platform built as a microservices system.**
+
+React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
+
+![EventZen Hero](docs/hero.png)
+
+
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Vault](https://img.shields.io/badge/HashiCorp-Vault-FFEC6E?style=for-the-badge&logo=vault&logoColor=black)](https://www.vaultproject.io/)
+
+
+
+</div>
+
+---
+
+## Table of Contents
+
+- [Quick Setup](#quick-setup)
+- [Architecture](#architecture)
+- [System Flow](#system-flow)
+- [Database ER Diagrams](#database-er-diagrams)
+- [Repository Structure](#repository-structure)
+- [Runtime Ports & Services](#runtime-ports--services)
+- [Monitoring](#monitoring)
+- [API Docs & Testing](#api-docs--testing)
+- [Local Development](#local-development)
+- [API Routing Through Gateway](#api-routing-through-gateway)
+- [Testing & Quality Gate](#testing--quality-gate)
+- [Service Documentation](#service-documentation)
+- [Tech Stack](#tech-stack)
+
+---
+
+> [!NOTE]
+> On **Linux**, the setup scripts (`.ps1`) require **PowerShell 7+**. Install it via your package manager (e.g. `sudo snap install powershell --classic`) before proceeding.
+
+## Quick Setup
+
+> **Use this for the fastest local startup.**
+> For full details and troubleshooting, see [`GETTING_STARTED.md`](GETTING_STARTED.md).
+
+### 1) Prerequisites
+
+```powershell
+docker --version
+docker compose version
+vault --version
+curl.exe --version (optional)
+```
+
+> [!NOTE]
+> All commands should return a version number. Install any missing tools before continuing.
+
+> [!TIP]
+> **Install Vault CLI quickly:**
+> Windows: `winget install HashiCorp.Vault`
+> Linux: `sudo apt-get install -y vault` (or see [`GETTING_STARTED.md`](GETTING_STARTED.md) for the full repo setup)
+
+
+### 2) Create local env file
+
+```powershell
+Copy-Item .env.example .env
+```
+
+In `.env`, confirm these values:
+
+| Variable | Notes |
+|---|---|
+| `VAULT_ADDR` | Your Vault server address |
+| `VAULT_DOCKER_ADDR` | Container-reachable Vault URL |
+| `VAULT_KV_MOUNT` | Set to `secret` |
+| `VAULT_KV_PATH` | **Must be** `eventzen/ez-secrets` |
+| `EZ_VAULT_WRAP_PATH` | Set to `auth/token/create` |
+
+### 3) Vault setup — choose one
+
+<details>
+<summary><b>Option A:</b> Start local dev Vault in Docker</summary>
+
+```powershell
+docker run --name eventzen-vault -d \
+  --cap-add=IPC_LOCK \
+  -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token \
+  -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 \
+  -p 8200:8200 \
+  hashicorp/vault:1.16
+```
+
+If the container already exists:
+
+```powershell
+docker start eventzen-vault
+```
+
+Then set CLI env:
+
+```powershell
+$env:VAULT_ADDR = "http://127.0.0.1:8200"
+$env:VAULT_TOKEN = "root-dev-token"
+```
+
+</details>
+
+<details>
+<summary><b>Option B:</b> Use an existing / external Vault</summary>
+
+- Set `.env` → `VAULT_ADDR` to your real Vault URL.
+- Set `.env` → `VAULT_DOCKER_ADDR` to a container-reachable Vault URL.
+- Set shell `VAULT_TOKEN` to a valid token for your secret path.
+
+</details>
+
+### 4) Vault sanity check
+
+```powershell
+vault status
+vault secrets list
+```
+
+If `secret/` is missing:
+
+```powershell
+vault secrets enable -path=secret kv-v2
+```
+
+> [!IMPORTANT]
+> Vault should be **unsealed** and the `secret/` mount must exist before continuing.
+
+### 5) Load secrets
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+```
+
+Edit `vault-secrets.local.json` with your real values, then load and verify:
+
+```powershell
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+vault kv get -mount=secret eventzen/ez-secrets
+```
+
+### 6) Generate wrapped token
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+```
+
+> [!TIP]
+> After this step, `.env` should have a non-empty `VAULT_WRAPPED_SECRET_ID`.
+
+### 7) Start the stack
+
+```powershell
+./scripts/start-local.ps1
+```
+
+### 8) Health check
+
+```powershell
+curl.exe -fsS http://localhost:8080/health
+```
+
+The app opens at **http://localhost:8080**.
+
+### 9) Troubleshooting
+
+<details>
+<summary>Health check failed? Expand for quick debug steps.</summary>
+
+```powershell
+docker compose ps
+docker compose logs --tail=120 nginx-gateway
+docker compose logs --tail=120 node-service spring-service dotnet-service
+```
+
+If a Vault / token error appears:
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+./scripts/start-local.ps1
+```
+
+</details>
+
+### 10) Stop safely
+
+```powershell
+docker compose down
+```
+
+Full local reset (**removes DB volumes**):
+
+```powershell
+docker compose down -v
+```
+
+---
 
 ## Architecture
 
-- Frontend: React + Vite
-- API Gateway: Nginx
-- Backend services:
-	- Node.js service for auth, attendees, notifications, uploads
-	- Spring Boot service for events, venues, schedules
-	- ASP.NET Core service for budgets and financial reports
-- Data + infra:
-	- MongoDB (Node and .NET domains)
-	- MySQL (Spring domain)
-	- Redpanda/Kafka (event-driven messaging)
-	- MinIO (object storage for media)
-	- Prometheus + Grafana (health/metrics monitoring)
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Frontend** | React + Vite | Single-page application |
+| **Gateway** | Nginx | Reverse proxy & static file server |
+| **Node Service** | Node.js 20 | Auth · Attendees · Notifications · Uploads · Payments · Reviews |
+| **Spring Service** | Spring Boot 3 (Java 21) | Events · Venues · Schedules |
+| **.NET Service** | ASP.NET Core (.NET 10) | Budgets · Financial Reports |
+| **MongoDB** | v7 | Node + .NET domain data |
+| **MySQL** | v8 | Spring domain data |
+| **Redpanda** | Kafka API | Event-driven messaging bus |
+| **MinIO** | S3-compatible | Object storage for media |
+| **Monitoring** | Prometheus + Grafana | Health & metrics dashboards |
+| **Secrets** | HashiCorp Vault | Centralized secret management |
 
-## Request Flow
+---
+
+## System Flow
 
 ```mermaid
 flowchart LR
@@ -46,12 +252,12 @@ flowchart LR
 	GF[Grafana] --> P
 ```
 
-## Mermaid Diagrams
+---
 
-GitHub supports Mermaid in Markdown. The diagrams below are synced from `mydocs/ERD.mysql.mmd` and `mydocs/ERD.mongodb.mmd`.
+## Database ER Diagrams
 
 <details>
-<summary>MySQL ERD (Spring Domain)</summary>
+<summary>MySQL ERD — Spring Domain</summary>
 
 ```mermaid
 erDiagram
@@ -137,7 +343,7 @@ erDiagram
 </details>
 
 <details>
-<summary>MongoDB ERD (Node + Budget Domains)</summary>
+<summary>MongoDB ERD — Node + Budget Domains</summary>
 
 ```mermaid
 erDiagram
@@ -296,170 +502,116 @@ erDiagram
 
 </details>
 
+---
+
 ## Repository Structure
 
-```text
+```
 .
-├─ client/                 # React + Vite frontend
-├─ server/
-│  ├─ backend-node/        # Node.js auth/attendees/notifications
-│  ├─ backend-spring/      # Spring Boot events/venues/schedule
-│  └─ backend-dotnet/      # ASP.NET Core budget/reporting
-├─ nginx/                  # Gateway Dockerfile + Nginx routing config
-├─ monitoring/             # Prometheus + Grafana dashboards/config
-├─ scripts/                # Cross-service quality gate and utilities
-├─ eventzen-docker/        # Docker environment notes
-├─ mydocs/                 # Project docs (ERD/endpoints)
-├─ docker-compose.yml      # Full local stack (frontend + all backends + infra)
-├─ .env.example            # Required environment variables template
-├─ GETTING_STARTED.md      # Full setup guide
-└─ vault-secrets.example.json
+├── Capstone.sln                                         # Solution entry
+├── client/                                              # React + Vite frontend
+├── docs/                                                # Hero image + Mermaid diagrams
+├── mydocs/                                              # Team docs (endpoints, runbooks, UML)
+├── server/
+│   ├── backend-node/                                    # Node.js — auth / attendees / notifications
+│   ├── backend-spring/                                  # Spring Boot — events / venues / schedule
+│   └── backend-dotnet/                                  # ASP.NET Core — budget / reporting
+├── nginx/                                               # Gateway Dockerfile + routing config
+├── monitoring/                                          # Prometheus + Grafana config
+├── scripts/                                             # Quality gate & utility scripts
+├── eventzen-docker/                                     # Docker environment notes
+├── docker-compose.yml                                   # Full local stack
+├── EventZen_Full_Application.postman_collection.json    # Root API test collection
+├── .env.example                                         # Environment variables template
+├── GETTING_STARTED.md                                   # Full setup guide
+└── vault-secrets.example.json                           # Vault secrets template
 ```
 
-## What Runs Where
+---
 
-- Public entry point: http://localhost:8080
-- Gateway health: http://localhost:8080/health
-- Internal backend container ports (Docker network only):
-	- Node service: 8081
-	- Spring service: 8082
-	- .NET service: 8083
-- Local host-exposed infra ports (for tooling only):
-	- MongoDB: 27018
-	- MySQL: 3307
-	- MinIO API: 9000
-	- MinIO Console: 9001
-	- Kafka external: 9094
-	- Prometheus UI: 9090 (localhost only)
-	- Grafana UI: 3000 (localhost only)
+## Runtime Ports & Services
 
-Port configuration policy:
+### Public Endpoints
 
-- Public gateway port is intentionally fixed to 8080 in Compose.
-- Infra/tooling host ports are configurable in .env via:
-	- MONGO_HOST_PORT
-	- MYSQL_HOST_PORT
-	- MINIO_API_HOST_PORT
-	- MINIO_CONSOLE_HOST_PORT
-	- KAFKA_HOST_PORT
-	- PROMETHEUS_HOST_PORT
-	- GRAFANA_HOST_PORT
-- Internal service ports (8081/8082/8083) are kept stable for service-to-service URLs and health checks.
+| Endpoint | URL |
+|---|---|
+| App entry point | http://localhost:8080 |
+| Gateway health | http://localhost:8080/health |
+| Swagger UI | http://localhost:8080/swagger/ |
+| Aggregated OpenAPI | http://localhost:8080/openapi/eventzen-aggregated.yaml |
+
+### Internal Service Ports (Docker network)
+
+| Service | Port |
+|---|---|
+| Node service | `8081` |
+| Spring service | `8082` |
+| .NET service | `8083` |
+
+### Host-Exposed Infra Ports (tooling only)
+
+| Service | Default Port | `.env` Override |
+|---|---|---|
+| MongoDB | `27018` | `MONGO_HOST_PORT` |
+| MySQL | `3307` | `MYSQL_HOST_PORT` |
+| MinIO API | `9000` | `MINIO_API_HOST_PORT` |
+| MinIO Console | `9001` | `MINIO_CONSOLE_HOST_PORT` |
+| Kafka external | `9094` | `KAFKA_HOST_PORT` |
+| Prometheus UI | `9090` | `PROMETHEUS_HOST_PORT` |
+| Grafana UI | `3000` | `GRAFANA_HOST_PORT` |
+
+> [!NOTE]
+> The public gateway port is **fixed to 8080** in Compose. Internal service ports (`8081`/`8082`/`8083`) are kept stable for service-to-service URLs and health checks.
+
+---
 
 ## Monitoring
 
-Prometheus and Grafana are included in Docker Compose for application and infrastructure monitoring.
+Prometheus and Grafana are included in Docker Compose for full-stack observability.
 
-- Prometheus: `http://127.0.0.1:9090`
-- Grafana: `http://127.0.0.1:3000`
-- Grafana default credentials are read from `.env`:
-	- `GRAFANA_ADMIN_USER`
-	- `GRAFANA_ADMIN_PASSWORD`
+| Dashboard | URL | Credentials |
+|---|---|---|
+| Prometheus | http://127.0.0.1:9090 | — |
+| Grafana | http://127.0.0.1:3000 | `.env` → `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
 
-Monitored targets include:
+**Monitored targets:**
 
-- Node service (`/metrics`)
-- Spring service (`/actuator/prometheus`)
-- .NET service (`/metrics`)
-- Nginx exporter
-- cAdvisor (container metrics)
-- MongoDB exporter
-- MySQL exporter
-- Kafka exporter
-- MinIO native metrics endpoint
+| Target | Metrics Endpoint |
+|---|---|
+| Node service | `/metrics` |
+| Spring service | `/actuator/prometheus` |
+| .NET service | `/metrics` |
+| Nginx exporter | built-in |
+| cAdvisor | container metrics |
+| MongoDB exporter | built-in |
+| MySQL exporter | built-in |
+| Kafka exporter | built-in |
+| MinIO | native metrics |
 
-See `monitoring/README.md` for details.
+> See [`monitoring/README.md`](monitoring/README.md) for full details.
 
-## Quick Start (Docker, Recommended)
+---
 
-If you want a full beginner-friendly walkthrough, follow `GETTING_STARTED.md`.
+## API Docs & Testing
 
-### 1. Prepare environment
+| Resource | Location |
+|---|---|
+| Swagger UI | http://localhost:8080/swagger/ |
+| Aggregated OpenAPI spec | http://localhost:8080/openapi/eventzen-aggregated.yaml |
+| Postman collection | `EventZen_Full_Application.postman_collection.json` |
+| Endpoint inventory | [`docs/Endpoints.md`](docs/Endpoints.md) |
 
-```bash
-cp .env.example .env
-```
+> [!TIP]
+> **Postman quick start:** Set the `baseUrl` variable to `http://localhost:8080`. The collection includes auth, events, attendees, payments, and budget/report flows.
 
-On Windows PowerShell:
+---
 
-```powershell
-Copy-Item .env.example .env
-```
+## Local Development
 
-Edit `.env` and set at least:
+> Use this mode to run services **individually** outside of Docker Compose.
 
-- Vault connectivity variables (`VAULT_ADDR`, `VAULT_*`)
-- Container-side Vault address (`VAULT_DOCKER_ADDR`) for Docker networking
-- Wrapped SecretID placeholder (`VAULT_WRAPPED_SECRET_ID`)
-- Infra secrets still used by third-party images (`MYSQL_ROOT_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`)
-
-Use `vault-secrets.example.json` as your key template and create/update these values directly in the Vault UI at `secret/eventzen/ez-secrets`.
-
-Generate one wrapped token in your Vault client for that secret access scope, then paste it into `.env`:
-
-- `VAULT_WRAPPED_SECRET_ID=<wrapped-token>`
-
-Generate a fresh wrapped token before each `docker compose up` because wrapped tokens are single-use and short-lived.
-
-### 2. Build and start everything
-
-```bash
-docker compose up --build
-```
-
-Or use the one-command helper (generates a fresh wrapped token automatically):
-
-```powershell
-./scripts/start-local.ps1
-```
-
-This command builds and installs dependencies for all services, including the
-frontend build that is bundled into the Nginx gateway image.
-
-On startup, Compose also runs an idempotent `user-seed` job that upserts default
-test users into MongoDB, so no manual seeding step is required.
-
-Default test users:
-
-- `admin@ez.local` (ADMIN)
-- `vendor@ez.local` (VENDOR)
-- `user@ez.local` (CUSTOMER)
-- Password for all: `Eventzen@2026!` (override with `TEST_USER_PASSWORD`)
-
-If you need to re-run seeding manually:
-
-```bash
-docker compose run --rm user-seed
-```
-
-### 3. Verify health
-
-```bash
-curl http://localhost:8080/health
-```
-
-Expected response: JSON status from `nginx-gateway`.
-
-### 4. Stop stack
-
-```bash
-docker compose down
-```
-
-Remove containers and volumes:
-
-```bash
-docker compose down -v
-```
-
-`docker compose down -v` removes persisted databases; next startup will seed
-the default users again.
-
-## Local Development (Without Full Compose)
-
-Use this mode if you want to run services individually.
-
-### Frontend
+<details>
+<summary>Frontend</summary>
 
 ```bash
 cd client
@@ -467,7 +619,10 @@ npm install
 npm run dev
 ```
 
-### Node service
+</details>
+
+<details>
+<summary>Node Service</summary>
 
 ```bash
 cd server/backend-node
@@ -475,14 +630,20 @@ npm install
 npm run dev
 ```
 
-### Spring service
+</details>
+
+<details>
+<summary>Spring Service</summary>
 
 ```bash
 cd server/backend-spring
 mvn spring-boot:run
 ```
 
-### .NET service
+</details>
+
+<details>
+<summary>.NET Service</summary>
 
 ```bash
 cd server/backend-dotnet/EventZen.Budget
@@ -490,37 +651,63 @@ dotnet restore
 dotnet run
 ```
 
+</details>
+
+---
+
 ## API Routing Through Gateway
 
-The gateway forwards requests as follows:
+| Route Pattern | Service |
+|---|---|
+| `/api/auth`, `/api/attendees`, `/api/notifications`, `/api/users`, `/api/uploads`, `/api/payments` | Node |
+| `/api/reviews`, `/api/vendor-applications`, `/api/admin/vendor-applications` | Node |
+| `/api/events`, `/api/venues`, `/api/schedule` | Spring |
+| `/api/budget`, `/api/reports` | .NET |
+| `/media` | MinIO |
+| `/swagger/`, `/openapi/eventzen-aggregated.yaml` | Static docs (gateway) |
+| All other routes | React SPA |
 
-- `/api/auth`, `/api/attendees`, `/api/notifications`, `/api/users`, `/api/uploads`, `/api/payments`, vendor-application routes -> Node service
-- `/api/events`, `/api/venues`, `/api/schedule` -> Spring service
-- `/api/budget`, `/api/reports` -> .NET service
-- `/media` -> MinIO
-- Non-API routes -> React SPA static build
+### Gateway Route Map
 
-Cancellation behavior:
+```mermaid
+flowchart LR
+	U[User Browser] --> G[Nginx Gateway :8080]
+	G --> N[Node Service]
+	G --> S[Spring Service]
+	G --> D[.NET Service]
+	G --> M[MinIO /media]
+	G --> X[Swagger/OpenAPI Docs]
 
-- When an admin changes an event status to `CANCELLED` (or a non-draft event is deleted), Spring now triggers attendee registration cancellation in the Node service.
-- This keeps event state and attendee/ticket state consistent across services.
+	N --- N1[/api/auth, /api/attendees, /api/notifications/]
+	N --- N2[/api/users, /api/uploads, /api/payments/]
+	N --- N3[/api/reviews, vendor-application routes/]
+	S --- S1[/api/events, /api/venues, /api/schedule/]
+	D --- D1[/api/budget, /api/reports/]
+```
 
-## Testing and Quality Gate
+> [!IMPORTANT]
+> **Cross-service event cancellation:** When an admin changes an event status to `CANCELLED` (or a non-draft event is deleted), the Spring service triggers attendee registration cancellation in the Node service — keeping event state and attendee/ticket state consistent across services.
 
-Run the repository-wide quality gate from project root:
+---
+
+## Testing & Quality Gate
+
+Run the repository-wide quality gate from the project root:
 
 ```powershell
 ./scripts/run_quality_gate.ps1
 ```
 
-What it runs:
+**What it runs:**
 
-- Node unit tests
-- Optional Node Kafka integration tests
-- Spring tests
-- .NET tests
-- Client lint
-- Client production build
+| Check | Description |
+|---|---|
+| Node unit tests | Backend-node test suite |
+| Kafka integration tests | Optional — event-driven flow tests |
+| Spring tests | Backend-spring test suite |
+| .NET tests | Backend-dotnet test suite |
+| Client lint | ESLint on the frontend |
+| Client build | Production build verification |
 
 To skip Kafka integration checks:
 
@@ -528,25 +715,35 @@ To skip Kafka integration checks:
 ./scripts/run_quality_gate.ps1 -WithKafkaIntegration:$false
 ```
 
+---
+
 ## Service Documentation
 
-- Node service docs: `server/backend-node/README.md`
-- Spring service docs: `server/backend-spring/README.md`
-- .NET service docs: `server/backend-dotnet/README.md`
-- Spring testing guide: `server/backend-spring/TESTING.md`
-- .NET testing guide: `server/backend-dotnet/TESTING.md`
+| Service | README | Testing Guide |
+|---|---|---|
+| Node | [`server/backend-node/README.md`](server/backend-node/README.md) | — |
+| Spring | [`server/backend-spring/README.md`](server/backend-spring/README.md) | [`TESTING.md`](server/backend-spring/TESTING.md) |
+| .NET | [`server/backend-dotnet/README.md`](server/backend-dotnet/README.md) | [`TESTING.md`](server/backend-dotnet/TESTING.md) |
+
+---
 
 ## Tech Stack
 
-- React 19 + Vite 8
-- Node.js 20
-- Spring Boot 3 (Java 21)
-- ASP.NET Core (.NET 10 image in Dockerfile)
-- MongoDB 7 + MySQL 8
-- Redpanda (Kafka API)
-- MinIO
-- Nginx
+<div align="center">
 
-## Implementation To-Do
+| Technology | Version |
+|---|---|
+| React | 19 |
+| Vite | 8 |
+| Node.js | 20 |
+| Spring Boot | 3 (Java 21) |
+| ASP.NET Core | .NET 10 |
+| MongoDB | 7 |
+| MySQL | 8 |
+| Redpanda | Kafka API |
+| MinIO | S3-compatible |
+| Nginx | Gateway |
+| HashiCorp Vault | Secrets |
+| Prometheus + Grafana | Monitoring |
 
-- CI/CD
+</div>

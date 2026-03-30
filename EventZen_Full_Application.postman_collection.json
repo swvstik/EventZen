@@ -1,0 +1,272 @@
+{
+  "info": {
+    "name": "EventZen Full Application - Gateway E2E",
+    "description": "Cross-service Postman test collection for EventZen through gateway on port 8080. Covers Node auth, Spring events, and .NET budget/reports flows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "vendorEmail", "value": "vendor@ez.local" },
+    { "key": "password", "value": "Eventzen@2026!" },
+    { "key": "vendorToken", "value": "" },
+    { "key": "eventId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Gateway Health",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Auth (Node)",
+      "item": [
+        {
+          "name": "2.1 Vendor Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{vendorEmail}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const token = json?.data?.accessToken || json?.accessToken;",
+                  "pm.test('Access token exists', function () {",
+                  "  pm.expect(token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (token) pm.collectionVariables.set('vendorToken', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{vendorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const role = json?.data?.role || json?.role;",
+                  "pm.test('Role exists', function () {",
+                  "  pm.expect(role).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Events (Spring)",
+      "item": [
+        {
+          "name": "3.1 Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{vendorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman Full-App Event\",\n  \"description\": \"Created by root Postman collection for end-to-end validation.\",\n  \"eventDate\": \"2026-04-10\",\n  \"endDate\": \"2026-04-10\",\n  \"startTime\": \"10:00:00\",\n  \"endTime\": \"12:00:00\",\n  \"category\": \"TECH\",\n  \"ownVenueName\": \"EventZen Hall\",\n  \"ownVenueAddress\": \"Demo Street, Colombo\",\n  \"tags\": [\"demo\", \"e2e\"],\n  \"allowWaitlist\": true,\n  \"saveAsDraft\": true,\n  \"ticketTiers\": [\n    {\n      \"name\": \"General\",\n      \"price\": 1500,\n      \"currency\": \"LKR\",\n      \"capacity\": 100,\n      \"maxPerOrder\": 4,\n      \"description\": \"General pass\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const id = String(json?.data?.id || json?.id || '');",
+                  "pm.test('Event id exists', function () {",
+                  "  pm.expect(id).to.not.eql('');",
+                  "});",
+                  "if (id) pm.collectionVariables.set('eventId', id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 List Events",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Budget and Reports (.NET)",
+      "item": [
+        {
+          "name": "4.1 Create Budget For Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{vendorToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totalAllocated\": 250000,\n  \"currency\": \"LKR\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/budget/events/{{eventId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "budget", "events", "{{eventId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201 or 409', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Get Budget Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{vendorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/budget/events/{{eventId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "budget", "events", "{{eventId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Vendor Reports Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{vendorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/vendor/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "vendor", "events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

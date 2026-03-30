@@ -9,6 +9,12 @@ Run unit tests:
 npm test
 ```
 
+Run unit tests with coverage threshold check:
+
+```bash
+npm run test:coverage
+```
+
 Run integration tests (Kafka-backed test requires broker at localhost:9094):
 
 ```bash
@@ -19,8 +25,19 @@ Without `RUN_KAFKA_INTEGRATION=true`, the broker-dependent integration test is s
 
 ## Runtime API Documentation
 
-- Swagger UI: `http://localhost:8081/swagger`
-- OpenAPI YAML: `http://localhost:8081/openapi.yaml`
+In this repository's default Docker Compose setup, only the gateway port is
+published externally (`localhost:8080`). Node's container port `8081` is
+internal-only, so direct links like `http://localhost:8081/swagger` usually do
+not open from the host.
+
+Use this rule:
+
+- If running Node directly on your host (outside compose), docs are at:
+   - `http://localhost:8081/swagger`
+   - `http://localhost:8081/openapi.yaml`
+- If running full stack via compose (recommended), use Postman through gateway:
+   - `http://localhost:8080/api/...`
+   - Swagger UI is not exposed by the gateway in this mode.
 
 ## Compose Auto-Seeding (Test Users)
 
