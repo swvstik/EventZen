@@ -1,8 +1,12 @@
 param(
     [string]$VaultAddr = $(if ($env:VAULT_ADDR) { $env:VAULT_ADDR } else { "http://127.0.0.1:8200" }),
     [string]$VaultToken = $(if ($env:VAULT_TOKEN) { $env:VAULT_TOKEN } else { "root-dev-token" }),
+    [string]$GatewayHealthUrl = $(if ($env:GATEWAY_HEALTH_URL) { $env:GATEWAY_HEALTH_URL } else { "http://localhost:8080/health" }),
+    [int]$StartupWaitSeconds = 180,
+    [int]$StartupPollIntervalSeconds = 5,
     [int]$ComposeRetryCount = 2,
     [int]$ComposeRetryDelaySeconds = 10,
+    [switch]$AllowGeneratedDevSecrets,
     [switch]$Detach,
     [switch]$NoBuild,
     [switch]$KeepWrappedToken,
@@ -120,6 +124,10 @@ if (-not (Test-Path $envFile)) {
 }
 
 if (-not (Test-Path $secretsLocalFile)) {
+    if (-not $AllowGeneratedDevSecrets) {
+        throw "Missing '$secretsLocalFile'. Create it first (for example: Copy-Item .\\vault-secrets.example.json .\\vault-secrets.local.json) and fill your real values. If you only want generated dev placeholders, run quickstart with -AllowGeneratedDevSecrets."
+    }
+
     if (-not (Test-Path $secretsExampleFile)) {
         throw "Missing 'vault-secrets.example.json' at '$secretsExampleFile'."
     }
@@ -144,7 +152,7 @@ if (-not (Test-Path $secretsLocalFile)) {
     $json = $secrets | ConvertTo-Json -Depth 20
     Set-Content -Path $secretsLocalFile -Encoding utf8 -Value $json
 
-    Write-Host "[quickstart] Created 'vault-secrets.local.json' with generated development secrets."
+    Write-Host "[quickstart] Created 'vault-secrets.local.json' with generated development secrets (AllowGeneratedDevSecrets)."
 }
 
 if (-not $SkipVaultContainer) {
@@ -159,6 +167,9 @@ Write-Host "[quickstart] Handing off to start-local script."
 $startArgs = @{
     VaultAddr = $VaultAddr
     VaultToken = $VaultToken
+    GatewayHealthUrl = $GatewayHealthUrl
+    StartupWaitSeconds = $StartupWaitSeconds
+    StartupPollIntervalSeconds = $StartupPollIntervalSeconds
     ComposeRetryCount = $ComposeRetryCount
     ComposeRetryDelaySeconds = $ComposeRetryDelaySeconds
 }

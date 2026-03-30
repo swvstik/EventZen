@@ -67,6 +67,9 @@ The recommended way to start EventZen locally. Automatically:
 | `-Detach` | Run stack in the background (`docker compose up -d`) |
 | `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
 | `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` in `.env` after startup |
+| `-GatewayHealthUrl` | Health endpoint used for readiness checks in detached mode (default: `http://localhost:8080/health`) |
+| `-StartupWaitSeconds` | Max seconds to wait for stack readiness in detached mode (default: `180`) |
+| `-StartupPollIntervalSeconds` | Poll interval in seconds for readiness checks (default: `5`) |
 | `-ComposeRetryCount` | Number of automatic compose retries on failure (default: `2`) |
 | `-ComposeRetryDelaySeconds` | Delay between retries in seconds (default: `10`) |
 
@@ -77,10 +80,12 @@ One-command bootstrap for local development from Vault setup to app startup.
 ### What it does
 
 1. Creates `.env` from `.env.example` if missing
-2. Creates `vault-secrets.local.json` from the example if missing (and generates required dev secrets)
+2. Uses your existing `vault-secrets.local.json` (required by default)
 3. Starts Vault dev container (`eventzen-vault`) if needed
 4. Ensures Vault mount `secret/` (KV v2) exists
 5. Calls `start-local.ps1` to upload secrets, generate wrapped token, and start compose
+
+If `vault-secrets.local.json` is missing, quickstart fails with setup guidance unless you explicitly pass `-AllowGeneratedDevSecrets`.
 
 ### Usage
 
@@ -94,8 +99,12 @@ One-command bootstrap for local development from Vault setup to app startup.
 |---|---|
 | `-Detach` | Run stack in the background |
 | `-NoBuild` | Skip image rebuild |
+| `-AllowGeneratedDevSecrets` | Create `vault-secrets.local.json` from the example with generated placeholder secrets (dev-only fallback) |
 | `-KeepWrappedToken` | Keep wrapped token in `.env` after startup |
 | `-SkipVaultContainer` | Skip starting/creating local Vault container (use external Vault) |
+| `-GatewayHealthUrl` | Forwarded to `start-local.ps1`; health endpoint for readiness checks |
+| `-StartupWaitSeconds` | Forwarded to `start-local.ps1`; max wait time for readiness |
+| `-StartupPollIntervalSeconds` | Forwarded to `start-local.ps1`; readiness poll interval |
 | `-ComposeRetryCount` | Forwarded to `start-local.ps1`; compose retry attempts (default: `2`) |
 | `-ComposeRetryDelaySeconds` | Forwarded to `start-local.ps1`; delay between retries in seconds (default: `10`) |
 

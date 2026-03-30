@@ -48,6 +48,12 @@ No local runtime secret file is required.
 
 ## Quick Start Script
 
+Before running quickstart, create your local secrets file and fill real values:
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+```
+
 Use this single command to bootstrap local Vault setup and start the full app stack:
 
 ```powershell
@@ -57,10 +63,16 @@ Use this single command to bootstrap local Vault setup and start the full app st
 What it handles automatically:
 
 1. Creates `.env` from `.env.example` if missing.
-2. Creates `vault-secrets.local.json` from the example if missing (with generated dev-safe secrets for required keys).
+2. Uses your existing `vault-secrets.local.json` (required by default).
 3. Starts local Vault dev container (`eventzen-vault`) if needed.
 4. Ensures `secret/` KV v2 mount exists.
 5. Runs `./scripts/start-local.ps1` to upload local secrets, generate wrapped token, and start Docker Compose.
+
+Optional dev-only fallback if you want auto-generated placeholders:
+
+```powershell
+./scripts/quickstart.ps1 -Detach -AllowGeneratedDevSecrets
+```
 
 Use this path when you want the fastest setup with minimal manual steps. The manual path below remains fully supported.
 

@@ -3,6 +3,9 @@ param(
     [string]$VaultToken = $(if ($env:VAULT_TOKEN) { $env:VAULT_TOKEN } else { "root-dev-token" }),
     [string]$Policy = "root",
     [string]$WrapTtl = "30m",
+    [string]$GatewayHealthUrl = $(if ($env:GATEWAY_HEALTH_URL) { $env:GATEWAY_HEALTH_URL } else { "http://localhost:8080/health" }),
+    [int]$StartupWaitSeconds = 180,
+    [int]$StartupPollIntervalSeconds = 5,
     [int]$ComposeRetryCount = 2,
     [int]$ComposeRetryDelaySeconds = 10,
     [switch]$Detach,
@@ -58,6 +61,71 @@ function Show-ComposeFailureDiagnostics {
     } catch {
         Write-Host "[start-local] Failed to read compose logs." -ForegroundColor Yellow
     }
+}
+
+function Get-ContainerRuntimeState {
+    param([string]$ContainerName)
+
+    try {
+        $state = (& docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' $ContainerName 2>$null | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($state)) {
+            return $null
+        }
+        return $state
+    } catch {
+        return $null
+    }
+}
+
+function Wait-ForStackReadiness {
+    param(
+        [string]$HealthUrl,
+        [int]$TimeoutSeconds,
+        [int]$PollIntervalSeconds
+    )
+
+    $criticalContainers = @(
+        "eventzen-mongo",
+        "eventzen-mysql",
+        "eventzen-kafka",
+        "eventzen-node",
+        "eventzen-spring",
+        "eventzen-dotnet",
+        "eventzen-nginx"
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $badStates = @()
+
+        foreach ($container in $criticalContainers) {
+            $state = Get-ContainerRuntimeState -ContainerName $container
+            if ($state -in @("unhealthy", "exited", "dead")) {
+                $badStates += ("{0}:{1}" -f $container, $state)
+            }
+        }
+
+        if ($badStates.Count -gt 0) {
+            Show-ComposeFailureDiagnostics
+            throw "Startup failed. Unhealthy containers detected: $($badStates -join ', ')."
+        }
+
+        $gatewayState = Get-ContainerRuntimeState -ContainerName "eventzen-nginx"
+        if ($gatewayState -eq "healthy" -or $gatewayState -eq "running") {
+            try {
+                $null = Invoke-RestMethod -Method Get -Uri $HealthUrl -TimeoutSec 5
+                Write-Host "[start-local] Stack is ready. Health check passed at $HealthUrl"
+                return
+            } catch {
+                # Continue polling until timeout.
+            }
+        }
+
+        Start-Sleep -Seconds $PollIntervalSeconds
+    }
+
+    Show-ComposeFailureDiagnostics
+    throw "Timed out waiting for stack readiness after $TimeoutSeconds seconds. Last checked health URL: $HealthUrl"
 }
 
 $vaultKvUri = "{0}/v1/{1}/data/{2}" -f $VaultAddr.TrimEnd('/'), $vaultKvMount.Trim('/'), $vaultKvPath.Trim('/')
@@ -170,6 +238,14 @@ try {
         throw "ComposeRetryDelaySeconds must be 0 or greater."
     }
 
+    if ($StartupWaitSeconds -le 0) {
+        throw "StartupWaitSeconds must be greater than 0."
+    }
+
+    if ($StartupPollIntervalSeconds -le 0) {
+        throw "StartupPollIntervalSeconds must be greater than 0."
+    }
+
     $maxAttempts = $ComposeRetryCount + 1
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         Write-Host "[start-local] Running: docker $($composeArgs -join ' ') (attempt $attempt/$maxAttempts)"
@@ -188,6 +264,11 @@ try {
 
         Show-ComposeFailureDiagnostics
         throw "docker compose up failed with exit code $LASTEXITCODE"
+    }
+
+    if ($Detach) {
+        Write-Host "[start-local] Waiting for stack readiness..."
+        Wait-ForStackReadiness -HealthUrl $GatewayHealthUrl -TimeoutSeconds $StartupWaitSeconds -PollIntervalSeconds $StartupPollIntervalSeconds
     }
 } finally {
     Pop-Location

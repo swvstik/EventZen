@@ -51,6 +51,14 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 > [!IMPORTANT]
 > **Quick start everything (Vault + secrets + application) without the setup hassle:**
 
+Before running quickstart, create your local secrets file first:
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+```
+
+Then fill your real values (SMTP/Polar/etc.) in `vault-secrets.local.json` and run:
+
 ```powershell
 ./scripts/quickstart.ps1 -Detach
 ```
@@ -64,10 +72,15 @@ If your network is unstable while pulling images, use:
 What this does for convenience:
 
 - Creates `.env` from `.env.example` if missing
-- Creates `vault-secrets.local.json` from the example if missing (with generated dev secrets)
 - Starts a local Vault dev container if needed
 - Ensures the `secret/` KV v2 mount exists
 - Runs `start-local.ps1` (uploads local secrets, generates wrapped token, starts compose)
+
+Optional dev-only fallback (not recommended for full feature testing):
+
+```powershell
+./scripts/quickstart.ps1 -Detach -AllowGeneratedDevSecrets
+```
 
 Manual setup still works and is fully supported. If you prefer explicit control, use the step-by-step flow below.
 
