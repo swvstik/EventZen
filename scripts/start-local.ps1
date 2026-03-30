@@ -128,6 +128,60 @@ function Wait-ForStackReadiness {
     throw "Timed out waiting for stack readiness after $TimeoutSeconds seconds. Last checked health URL: $HealthUrl"
 }
 
+function New-WrappedVaultSecretId {
+    param(
+        [string]$Address,
+        [string]$Token,
+        [string]$PolicyName,
+        [string]$WrapTtlValue
+    )
+
+    $headers = @{
+        "X-Vault-Token" = $Token
+        "X-Vault-Wrap-TTL" = $WrapTtlValue
+    }
+    $body = @{
+        policies = @($PolicyName)
+        ttl = "1h"
+    }
+
+    try {
+        $resp = Invoke-RestMethod -Method Post -Uri ("{0}/v1/auth/token/create" -f $Address.TrimEnd('/')) -Headers $headers -ContentType "application/json" -Body ($body | ConvertTo-Json)
+    } catch {
+        throw "Failed to generate wrapped token from Vault. Check VAULT_TOKEN and policy permissions."
+    }
+
+    $wrappedToken = $resp.wrap_info.token
+    if ([string]::IsNullOrWhiteSpace($wrappedToken)) {
+        throw "Vault did not return wrap_info.token."
+    }
+
+    return $wrappedToken
+}
+
+function Set-EnvWrappedToken {
+    param(
+        [string]$EnvFilePath,
+        [string]$WrappedToken
+    )
+
+    $envLines = Get-Content -Path $EnvFilePath -Encoding utf8
+    $updated = $false
+    for ($i = 0; $i -lt $envLines.Count; $i++) {
+        if ($envLines[$i] -match '^VAULT_WRAPPED_SECRET_ID=') {
+            $envLines[$i] = "VAULT_WRAPPED_SECRET_ID=$WrappedToken"
+            $updated = $true
+            break
+        }
+    }
+
+    if (-not $updated) {
+        $envLines += "VAULT_WRAPPED_SECRET_ID=$WrappedToken"
+    }
+
+    Set-Content -Path $EnvFilePath -Value $envLines -Encoding utf8
+}
+
 $vaultKvUri = "{0}/v1/{1}/data/{2}" -f $VaultAddr.TrimEnd('/'), $vaultKvMount.Trim('/'), $vaultKvPath.Trim('/')
 $vaultHeaders = @{ "X-Vault-Token" = $VaultToken }
 $localSecrets = $null
@@ -184,42 +238,6 @@ if ($null -ne $localSecrets) {
     Write-Host "[start-local] Local secrets file not found. Using existing Vault path '$vaultKvMount/$vaultKvPath'."
 }
 
-$headers = @{
-    "X-Vault-Token" = $VaultToken
-    "X-Vault-Wrap-TTL" = $WrapTtl
-}
-$body = @{
-    policies = @($Policy)
-    ttl = "1h"
-}
-
-try {
-    $resp = Invoke-RestMethod -Method Post -Uri ("{0}/v1/auth/token/create" -f $VaultAddr.TrimEnd('/')) -Headers $headers -ContentType "application/json" -Body ($body | ConvertTo-Json)
-} catch {
-    throw "Failed to generate wrapped token from Vault. Check VAULT_TOKEN and policy permissions."
-}
-
-$wrappedToken = $resp.wrap_info.token
-if ([string]::IsNullOrWhiteSpace($wrappedToken)) {
-    throw "Vault did not return wrap_info.token."
-}
-
-$envLines = Get-Content -Path $envFile -Encoding utf8
-$updated = $false
-for ($i = 0; $i -lt $envLines.Count; $i++) {
-    if ($envLines[$i] -match '^VAULT_WRAPPED_SECRET_ID=') {
-        $envLines[$i] = "VAULT_WRAPPED_SECRET_ID=$wrappedToken"
-        $updated = $true
-        break
-    }
-}
-if (-not $updated) {
-    $envLines += "VAULT_WRAPPED_SECRET_ID=$wrappedToken"
-}
-Set-Content -Path $envFile -Value $envLines -Encoding utf8
-
-Write-Host "[start-local] Generated fresh wrapped token and updated .env"
-
 Push-Location $repoRoot
 try {
     $composeArgs = @("compose", "up")
@@ -248,6 +266,10 @@ try {
 
     $maxAttempts = $ComposeRetryCount + 1
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $wrappedToken = New-WrappedVaultSecretId -Address $VaultAddr -Token $VaultToken -PolicyName $Policy -WrapTtlValue $WrapTtl
+        Set-EnvWrappedToken -EnvFilePath $envFile -WrappedToken $wrappedToken
+        Write-Host "[start-local] Generated fresh wrapped token for compose attempt $attempt/$maxAttempts"
+
         Write-Host "[start-local] Running: docker $($composeArgs -join ' ') (attempt $attempt/$maxAttempts)"
         & docker @composeArgs
 
