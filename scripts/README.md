@@ -47,10 +47,12 @@ VAULT_WRAPPED_SECRET_ID=<wrapped-token>
 
 The recommended way to start EventZen locally. Automatically:
 
-1. Generates a fresh wrapped token
-2. Writes it to `.env`
-3. Starts Docker Compose
-4. Clears `VAULT_WRAPPED_SECRET_ID` from `.env` after startup (security)
+1. Uploads `vault-secrets.local.json` when present (new KV version at the same path)
+2. Uses existing hosted Vault path when local file is absent
+3. Generates a fresh wrapped token
+4. Writes it to `.env`
+5. Starts Docker Compose
+6. Clears `VAULT_WRAPPED_SECRET_ID` from `.env` after startup (security)
 
 ### Usage
 
@@ -65,6 +67,33 @@ The recommended way to start EventZen locally. Automatically:
 | `-Detach` | Run stack in the background (`docker compose up -d`) |
 | `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
 | `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` in `.env` after startup |
+
+## quickstart.ps1
+
+One-command bootstrap for local development from Vault setup to app startup.
+
+### What it does
+
+1. Creates `.env` from `.env.example` if missing
+2. Creates `vault-secrets.local.json` from the example if missing (and generates required dev secrets)
+3. Starts Vault dev container (`eventzen-vault`) if needed
+4. Ensures Vault mount `secret/` (KV v2) exists
+5. Calls `start-local.ps1` to upload secrets, generate wrapped token, and start compose
+
+### Usage
+
+```powershell
+./scripts/quickstart.ps1 -Detach
+```
+
+### Optional flags
+
+| Flag | Effect |
+|---|---|
+| `-Detach` | Run stack in the background |
+| `-NoBuild` | Skip image rebuild |
+| `-KeepWrappedToken` | Keep wrapped token in `.env` after startup |
+| `-SkipVaultContainer` | Skip starting/creating local Vault container (use external Vault) |
 
 ## run_quality_gate.ps1
 

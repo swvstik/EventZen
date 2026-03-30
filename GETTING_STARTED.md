@@ -14,6 +14,7 @@ If you follow this document top to bottom, you should get a working stack on fir
 ## Table of Contents
 
 - [Runtime Model](#runtime-model-important)
+- [Quick Start Script](#quick-start-script)
 - [Quick Path](#quick-path-recommended)
 - [Full Setup](#full-setup-from-zero)
   - [1) Prerequisites](#1-prerequisites)
@@ -42,6 +43,26 @@ EventZen startup is Vault-first:
 4. App services load secrets from Vault at boot.
 
 No local runtime secret file is required.
+
+---
+
+## Quick Start Script
+
+Use this single command to bootstrap local Vault setup and start the full app stack:
+
+```powershell
+./scripts/quickstart.ps1 -Detach
+```
+
+What it handles automatically:
+
+1. Creates `.env` from `.env.example` if missing.
+2. Creates `vault-secrets.local.json` from the example if missing (with generated dev-safe secrets for required keys).
+3. Starts local Vault dev container (`eventzen-vault`) if needed.
+4. Ensures `secret/` KV v2 mount exists.
+5. Runs `./scripts/start-local.ps1` to upload local secrets, generate wrapped token, and start Docker Compose.
+
+Use this path when you want the fastest setup with minimal manual steps. The manual path below remains fully supported.
 
 ---
 
@@ -498,7 +519,17 @@ If `secret/` is not in the list:
 vault secrets enable -path=secret kv-v2
 ```
 
-### Load secrets from your local file
+### Load secrets from your local file (optional)
+
+`./scripts/start-local.ps1` can now handle this automatically:
+
+- If `vault-secrets.local.json` exists, it uploads the file before startup (creating a new KV version at the same path).
+- If the local file is missing, it uses the existing hosted Vault path.
+- If both are missing, startup fails early with setup guidance.
+
+This automation is for convenience. The manual Vault CLI flow remains supported and works the same as before.
+
+Manual load remains available:
 
 ```powershell
 vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
@@ -547,17 +578,19 @@ VAULT_WRAPPED_SECRET_ID=<wrapped-token>
 
 ## 7) Start EventZen
 
-### Preferred: use the helper script
+### Preferred for convenience: use the helper script
 
 ```powershell
 ./scripts/start-local.ps1
 ```
 
 This script automatically:
-1. Regenerates the wrapped token
-2. Writes it to `.env`
-3. Launches Docker Compose
-4. Clears the token from `.env` for security
+1. Uploads `vault-secrets.local.json` when present (new KV version at the same path)
+2. Falls back to existing hosted Vault path when local file is absent
+3. Regenerates the wrapped token
+4. Writes it to `.env`
+5. Launches Docker Compose
+6. Clears the token from `.env` for security
 
 ### Manual startup
 
@@ -567,6 +600,10 @@ docker compose up --build
 
 > [!IMPORTANT]
 > If starting manually, you must generate a fresh wrapped token first (Step 6). The `start-local.ps1` script does this for you.
+
+Both flows are valid:
+- Helper flow: faster and safer for day-to-day local runs.
+- Manual flow: useful when you want explicit control of each step.
 
 ### What startup does
 

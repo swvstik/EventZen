@@ -12,6 +12,9 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $envFile = Join-Path $repoRoot ".env"
+$vaultKvMount = if ($env:VAULT_KV_MOUNT) { $env:VAULT_KV_MOUNT } else { "secret" }
+$vaultKvPath = if ($env:VAULT_KV_PATH) { $env:VAULT_KV_PATH } else { "eventzen/ez-secrets" }
+$vaultSecretsFile = Join-Path $repoRoot "vault-secrets.local.json"
 
 if (-not (Test-Path $envFile)) {
     throw "Missing .env at '$envFile'. Copy .env.example to .env first."
@@ -27,6 +30,72 @@ try {
     $null = Invoke-RestMethod -Method Get -Uri ("{0}/v1/sys/health" -f $VaultAddr.TrimEnd('/')) -TimeoutSec 10
 } catch {
     throw "Vault health check failed at $VaultAddr. Ensure Vault is running and reachable."
+}
+
+function Get-HttpStatusCode {
+    param([System.Exception]$Exception)
+
+    if ($null -ne $Exception.Response -and $null -ne $Exception.Response.StatusCode) {
+        return [int]$Exception.Response.StatusCode
+    }
+
+    return $null
+}
+
+$vaultKvUri = "{0}/v1/{1}/data/{2}" -f $VaultAddr.TrimEnd('/'), $vaultKvMount.Trim('/'), $vaultKvPath.Trim('/')
+$vaultHeaders = @{ "X-Vault-Token" = $VaultToken }
+$localSecrets = $null
+
+if (Test-Path $vaultSecretsFile) {
+    try {
+        $localSecrets = Get-Content -Path $vaultSecretsFile -Encoding utf8 -Raw | ConvertFrom-Json
+    } catch {
+        throw "Invalid JSON in '$vaultSecretsFile'. Fix the file before running start-local."
+    }
+
+    if ($null -eq $localSecrets) {
+        throw "'$vaultSecretsFile' is empty. Add required secrets or remove the file if Vault is already seeded."
+    }
+
+    $localSecretKeyCount = @($localSecrets.PSObject.Properties.Name).Count
+    if ($localSecretKeyCount -eq 0) {
+        throw "'$vaultSecretsFile' has no keys. Add required secrets or remove the file if Vault is already seeded."
+    }
+}
+
+if ($null -ne $localSecrets) {
+    try {
+        $uploadBody = @{ data = $localSecrets } | ConvertTo-Json -Depth 100
+        $null = Invoke-RestMethod -Method Post -Uri $vaultKvUri -Headers $vaultHeaders -ContentType "application/json" -Body $uploadBody -TimeoutSec 15
+        Write-Host "[start-local] Uploaded '$vaultSecretsFile' to Vault path '$vaultKvMount/$vaultKvPath' (new KV version)."
+    } catch {
+        $statusCode = Get-HttpStatusCode -Exception $_.Exception
+        if ($statusCode -eq 401 -or $statusCode -eq 403) {
+            throw "Vault auth failed while uploading '$vaultSecretsFile'. Verify VAULT_TOKEN permissions."
+        }
+        throw "Failed to upload '$vaultSecretsFile' to Vault path '$vaultKvMount/$vaultKvPath'."
+    }
+} else {
+    $vaultPathExists = $false
+    try {
+        $null = Invoke-RestMethod -Method Get -Uri $vaultKvUri -Headers $vaultHeaders -TimeoutSec 10
+        $vaultPathExists = $true
+    } catch {
+        $statusCode = Get-HttpStatusCode -Exception $_.Exception
+        if ($statusCode -eq 404) {
+            $vaultPathExists = $false
+        } elseif ($statusCode -eq 401 -or $statusCode -eq 403) {
+            throw "Vault auth failed while checking '$vaultKvMount/$vaultKvPath'. Verify VAULT_TOKEN permissions."
+        } else {
+            throw "Failed to check Vault secrets path '$vaultKvMount/$vaultKvPath' at '$VaultAddr'."
+        }
+    }
+
+    if (-not $vaultPathExists) {
+        throw "Vault path '$vaultKvMount/$vaultKvPath' does not exist and '$vaultSecretsFile' was not found. Create vault-secrets.local.json or seed Vault before startup."
+    }
+
+    Write-Host "[start-local] Local secrets file not found. Using existing Vault path '$vaultKvMount/$vaultKvPath'."
 }
 
 $headers = @{

@@ -25,7 +25,8 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 
 ## Table of Contents
 
-- [Quick Setup](#quick-setup)
+- [Quick Start](#quick-start)
+- [Setting up](#setting-up)
 - [Required Secrets & API Keys](#required-secrets--api-keys)
 - [Architecture](#architecture)
 - [System Flow](#system-flow)
@@ -45,7 +46,26 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 > [!NOTE]
 > On **Linux**, the setup scripts (`.ps1`) require **PowerShell 7+**. Install it via your package manager (e.g. `sudo snap install powershell --classic`) before proceeding.
 
-## Quick Setup
+## Quick Start
+
+> [!IMPORTANT]
+> **Quick start everything (Vault + secrets + application) without the setup hassle:**
+
+```powershell
+./scripts/quickstart.ps1 -Detach
+```
+
+What this does for convenience:
+
+- Creates `.env` from `.env.example` if missing
+- Creates `vault-secrets.local.json` from the example if missing (with generated dev secrets)
+- Starts a local Vault dev container if needed
+- Ensures the `secret/` KV v2 mount exists
+- Runs `start-local.ps1` (uploads local secrets, generates wrapped token, starts compose)
+
+Manual setup still works and is fully supported. If you prefer explicit control, use the step-by-step flow below.
+
+## Setting up
 
 > **Use this for the fastest local startup.**
 > For full details and troubleshooting, see [`GETTING_STARTED.md`](GETTING_STARTED.md).
@@ -138,16 +158,26 @@ vault secrets enable -path=secret kv-v2
 > [!IMPORTANT]
 > Vault should be **unsealed** and the `secret/` mount must exist before continuing.
 
-### 5) Load secrets
+### 5) Prepare local secrets file
 
 ```powershell
 Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
 ```
 
-Edit `vault-secrets.local.json` with your real values, then load and verify:
+Edit `vault-secrets.local.json` with your real values.
 
 > [!WARNING]
 > Signing secrets (`JWT_SECRET`, `INTERNAL_SERVICE_SECRET`, `TOKEN_HASH_SECRET`) **must be strong** — at least 32 bytes / 64 characters. Short secrets will crash Spring Boot on startup. See [Required Secrets & API Keys](#required-secrets--api-keys) for the full key reference, including how to obtain Polar.sh and Gmail SMTP credentials.
+
+`./scripts/start-local.ps1` now checks Vault path `secret/eventzen/ez-secrets` automatically:
+
+- If `vault-secrets.local.json` exists, startup uploads it to Vault before compose (this updates the path to a new KV version).
+- If the local file is missing, startup uses the existing hosted Vault path.
+- If both are missing, startup fails with setup guidance.
+
+This is implemented for convenience in local development, but the manual Vault CLI flow is still supported.
+
+Optional manual load/verify (same behavior as before):
 
 ```powershell
 vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
@@ -159,13 +189,13 @@ vault kv get -mount=secret eventzen/ez-secrets
 > [!WARNING]
 > Each wrapped token is **single-use** — once consumed by startup, it cannot be reused. A fresh token must be generated before every `docker compose up`.
 
-**Option A (recommended):** Use the helper script, which generates a fresh wrapped token automatically, writes it to `.env`, starts compose, and clears the token afterwards:
+**Option A (recommended for convenience):** Use the helper script, which validates Vault secrets availability, generates a fresh wrapped token automatically, writes it to `.env`, starts compose, and clears the token afterwards:
 
 ```powershell
 ./scripts/start-local.ps1
 ```
 
-**Option B (manual):** Generate a wrapped token yourself, then run compose:
+**Option B (manual, still fully supported):** Generate a wrapped token yourself, then run compose:
 
 ```powershell
 ./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
