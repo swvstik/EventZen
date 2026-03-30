@@ -10,7 +10,8 @@ param(
     [int]$ComposeRetryDelaySeconds = 10,
     [switch]$Detach,
     [switch]$NoBuild,
-    [switch]$KeepWrappedToken
+    [switch]$KeepWrappedToken,
+    [switch]$SkipPortAutoResolve
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,6 +62,214 @@ function Show-ComposeFailureDiagnostics {
     } catch {
         Write-Host "[start-local] Failed to read compose logs." -ForegroundColor Yellow
     }
+}
+
+function Get-EnvValue {
+    param(
+        [string[]]$Lines,
+        [string]$Key
+    )
+
+    foreach ($line in $Lines) {
+        if ($line -match ("^{0}=" -f [regex]::Escape($Key))) {
+            return $line.Substring($Key.Length + 1)
+        }
+    }
+
+    return $null
+}
+
+function Set-EnvValue {
+    param(
+        [string[]]$Lines,
+        [string]$Key,
+        [string]$Value
+    )
+
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match ("^{0}=" -f [regex]::Escape($Key))) {
+            $Lines[$i] = ("{0}={1}" -f $Key, $Value)
+            return ,$Lines
+        }
+    }
+
+    return ,($Lines + ("{0}={1}" -f $Key, $Value))
+}
+
+function Test-PortAvailable {
+    param([int]$Port)
+
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+        $listener.Start()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $listener) {
+            try { $listener.Stop() } catch {}
+        }
+    }
+}
+
+function Find-NextAvailablePort {
+    param([int]$StartPort)
+
+    $candidate = [Math]::Max($StartPort, 1024)
+    while ($candidate -le 65535) {
+        if (Test-PortAvailable -Port $candidate) {
+            return $candidate
+        }
+        $candidate++
+    }
+
+    return $null
+}
+
+function Get-EventZenBoundHostPorts {
+    $bound = @{}
+
+    try {
+        $rows = & docker ps --format "{{.Names}}|{{.Ports}}" 2>$null
+    } catch {
+        return $bound
+    }
+
+    foreach ($row in $rows) {
+        if ([string]::IsNullOrWhiteSpace($row)) {
+            continue
+        }
+
+        $parts = $row.Split("|", 2)
+        if ($parts.Count -ne 2) {
+            continue
+        }
+
+        $name = $parts[0]
+        $ports = $parts[1]
+        if (-not $name.StartsWith("eventzen-")) {
+            continue
+        }
+
+        $matches = [regex]::Matches($ports, ":(\d+)->")
+        foreach ($match in $matches) {
+            $hostPort = 0
+            if ([int]::TryParse($match.Groups[1].Value, [ref]$hostPort)) {
+                $bound[$hostPort] = $true
+            }
+        }
+    }
+
+    return $bound
+}
+
+function Resolve-ComposeHostPorts {
+    param([string]$EnvPath)
+
+    $trackedPortDefaults = [ordered]@{
+        GATEWAY_HOST_PORT = 8080
+        MONGO_HOST_PORT = 27018
+        MYSQL_HOST_PORT = 3307
+        MINIO_API_HOST_PORT = 9000
+        MINIO_CONSOLE_HOST_PORT = 9001
+        KAFKA_HOST_PORT = 9094
+        PROMETHEUS_HOST_PORT = 9090
+        GRAFANA_HOST_PORT = 3000
+    }
+
+    $lines = Get-Content -Path $EnvPath -Encoding utf8
+    $changes = @()
+    $eventZenBoundPorts = Get-EventZenBoundHostPorts
+    $claimedPorts = @{}
+
+    foreach ($key in $trackedPortDefaults.Keys) {
+        $raw = Get-EnvValue -Lines $lines -Key $key
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            $raw = [string]$trackedPortDefaults[$key]
+        }
+
+        $port = 0
+        if (-not [int]::TryParse($raw, [ref]$port)) {
+            Write-Host "[start-local] Skipping port auto-resolve for '$key' (non-numeric value '$raw')." -ForegroundColor Yellow
+            continue
+        }
+
+        if ($port -lt 1 -or $port -gt 65535) {
+            Write-Host "[start-local] Skipping port auto-resolve for '$key' (out-of-range value '$raw')." -ForegroundColor Yellow
+            continue
+        }
+
+        $portConflict = -not (Test-PortAvailable -Port $port)
+        $duplicateConflict = $claimedPorts.ContainsKey($port)
+
+        if (-not $portConflict -and -not $duplicateConflict) {
+            $claimedPorts[$port] = $true
+            continue
+        }
+
+        if ($portConflict -and $eventZenBoundPorts.ContainsKey($port)) {
+            $claimedPorts[$port] = $true
+            continue
+        }
+
+        $newPort = Find-NextAvailablePort -StartPort ($port + 1)
+        if ($null -eq $newPort) {
+            throw "Unable to find a free host port to replace '$key=$port'."
+        }
+
+        while ($claimedPorts.ContainsKey($newPort)) {
+            $newPort = Find-NextAvailablePort -StartPort ($newPort + 1)
+            if ($null -eq $newPort) {
+                throw "Unable to find a unique free host port to replace '$key=$port'."
+            }
+        }
+
+        $lines = Set-EnvValue -Lines $lines -Key $key -Value ([string]$newPort)
+        $claimedPorts[$newPort] = $true
+        $changes += ("{0}: {1} -> {2}" -f $key, $port, $newPort)
+
+        if ($key -eq "GATEWAY_HOST_PORT") {
+            $oldGatewayUrl = ("http://localhost:{0}" -f $port)
+            $newGatewayUrl = ("http://localhost:{0}" -f $newPort)
+
+            $lines = Set-EnvValue -Lines $lines -Key "GATEWAY_HEALTH_URL" -Value ("http://localhost:{0}/health" -f $newPort)
+
+            $clientUrl = Get-EnvValue -Lines $lines -Key "CLIENT_URL"
+            if (-not [string]::IsNullOrWhiteSpace($clientUrl)) {
+                $updatedClientUrl = $clientUrl.Replace($oldGatewayUrl, $newGatewayUrl)
+                $lines = Set-EnvValue -Lines $lines -Key "CLIENT_URL" -Value $updatedClientUrl
+            }
+
+            $corsOrigins = Get-EnvValue -Lines $lines -Key "CORS_ALLOWED_ORIGINS"
+            if (-not [string]::IsNullOrWhiteSpace($corsOrigins)) {
+                $updatedCors = (($corsOrigins -split ",") | ForEach-Object {
+                    $origin = $_.Trim()
+                    if ($origin -eq $oldGatewayUrl) {
+                        return $newGatewayUrl
+                    }
+                    return $origin
+                }) -join ","
+                $lines = Set-EnvValue -Lines $lines -Key "CORS_ALLOWED_ORIGINS" -Value $updatedCors
+            }
+
+            $minioPublic = Get-EnvValue -Lines $lines -Key "MINIO_PUBLIC_BASE_URL"
+            if (-not [string]::IsNullOrWhiteSpace($minioPublic)) {
+                $updatedMinioPublic = $minioPublic.Replace($oldGatewayUrl, $newGatewayUrl)
+                $lines = Set-EnvValue -Lines $lines -Key "MINIO_PUBLIC_BASE_URL" -Value $updatedMinioPublic
+            }
+        }
+    }
+
+    if ($changes.Count -gt 0) {
+        Set-Content -Path $EnvPath -Encoding utf8 -Value $lines
+        Write-Host "[start-local] Port conflicts detected. Updated .env mappings:" -ForegroundColor Yellow
+        foreach ($change in $changes) {
+            Write-Host "[start-local]   $change" -ForegroundColor Yellow
+        }
+    }
+
+    return (Get-EnvValue -Lines $lines -Key "GATEWAY_HEALTH_URL")
 }
 
 function Get-ContainerRuntimeState {
@@ -182,6 +391,13 @@ function Set-EnvWrappedToken {
     Set-Content -Path $EnvFilePath -Value $envLines -Encoding utf8
 }
 
+if (-not $SkipPortAutoResolve) {
+    $resolvedGatewayHealth = Resolve-ComposeHostPorts -EnvPath $envFile
+    if (-not $PSBoundParameters.ContainsKey("GatewayHealthUrl") -and -not [string]::IsNullOrWhiteSpace($resolvedGatewayHealth)) {
+        $GatewayHealthUrl = $resolvedGatewayHealth
+    }
+}
+
 $vaultKvUri = "{0}/v1/{1}/data/{2}" -f $VaultAddr.TrimEnd('/'), $vaultKvMount.Trim('/'), $vaultKvPath.Trim('/')
 $vaultHeaders = @{ "X-Vault-Token" = $VaultToken }
 $localSecrets = $null
@@ -272,20 +488,21 @@ try {
 
         Write-Host "[start-local] Running: docker $($composeArgs -join ' ') (attempt $attempt/$maxAttempts)"
         & docker @composeArgs
+        $composeExitCode = $LASTEXITCODE
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($composeExitCode -eq 0) {
             break
         }
 
         if ($attempt -lt $maxAttempts) {
             Show-ComposeFailureDiagnostics
-            Write-Host "[start-local] Compose failed. Retrying in $ComposeRetryDelaySeconds seconds..." -ForegroundColor Yellow
+            Write-Host "[start-local] Compose failed (exit $composeExitCode). Retrying in $ComposeRetryDelaySeconds seconds..." -ForegroundColor Yellow
             Start-Sleep -Seconds $ComposeRetryDelaySeconds
             continue
         }
 
         Show-ComposeFailureDiagnostics
-        throw "docker compose up failed with exit code $LASTEXITCODE"
+        throw "docker compose up failed with exit code $composeExitCode"
     }
 
     if ($Detach) {

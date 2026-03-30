@@ -51,8 +51,9 @@ The recommended way to start EventZen locally. Automatically:
 2. Uses existing hosted Vault path when local file is absent
 3. Generates a fresh wrapped token
 4. Writes it to `.env`
-5. Starts Docker Compose
-6. Clears `VAULT_WRAPPED_SECRET_ID` from `.env` after startup (security)
+5. Auto-resolves busy host ports in `.env` before compose (unless disabled)
+6. Starts Docker Compose
+7. Clears `VAULT_WRAPPED_SECRET_ID` from `.env` after startup (security)
 
 ### Usage
 
@@ -67,6 +68,7 @@ The recommended way to start EventZen locally. Automatically:
 | `-Detach` | Run stack in the background (`docker compose up -d`) |
 | `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
 | `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` in `.env` after startup |
+| `-SkipPortAutoResolve` | Disable automatic host-port remapping and keep strict `.env` ports |
 | `-GatewayHealthUrl` | Health endpoint used for readiness checks in detached mode (default: `http://localhost:8080/health`) |
 | `-StartupWaitSeconds` | Max seconds to wait for stack readiness in detached mode (default: `180`) |
 | `-StartupPollIntervalSeconds` | Poll interval in seconds for readiness checks (default: `5`) |
@@ -85,6 +87,9 @@ One-command bootstrap for local development from Vault setup to app startup.
 4. Ensures Vault mount `secret/` (KV v2) exists
 5. Calls `start-local.ps1` to upload secrets, generate wrapped token, and start compose
 
+Quickstart also auto-resolves busy host ports in `.env` before calling `start-local.ps1`.
+To avoid double-remap, quickstart disables the downstream remap pass when it delegates to `start-local.ps1`.
+
 If `vault-secrets.local.json` is missing, quickstart fails with setup guidance unless you explicitly pass `-AllowGeneratedDevSecrets`.
 
 ### Usage
@@ -102,6 +107,7 @@ If `vault-secrets.local.json` is missing, quickstart fails with setup guidance u
 | `-AllowGeneratedDevSecrets` | Create `vault-secrets.local.json` from the example with generated placeholder secrets (dev-only fallback) |
 | `-KeepWrappedToken` | Keep wrapped token in `.env` after startup |
 | `-SkipVaultContainer` | Skip starting/creating local Vault container (use external Vault) |
+| `-SkipPortAutoResolve` | Disable automatic host-port remapping and keep strict `.env` ports |
 | `-GatewayHealthUrl` | Forwarded to `start-local.ps1`; health endpoint for readiness checks |
 | `-StartupWaitSeconds` | Forwarded to `start-local.ps1`; max wait time for readiness |
 | `-StartupPollIntervalSeconds` | Forwarded to `start-local.ps1`; readiness poll interval |

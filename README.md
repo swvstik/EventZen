@@ -26,7 +26,7 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Setting up](#setting-up)
+- [Alternative Setup Paths](#alternative-setup-paths)
 - [Required Secrets & API Keys](#required-secrets--api-keys)
 - [Architecture](#architecture)
 - [System Flow](#system-flow)
@@ -52,7 +52,7 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 > **Quick start everything (Vault + secrets + application) without the setup hassle:**
 
 > [!CAUTION]
-> Before running quickstart, keep these values aligned to avoid Spring/MySQL startup failures:
+> Before running quickstart, keep these values equal to avoid Spring/MySQL startup failures:
 > - `.env` -> `MYSQL_ROOT_PASSWORD`
 > - `vault-secrets.local.json` -> `MYSQL_ROOT_PASSWORD`
 > - `vault-secrets.local.json` -> `SPRING_DATASOURCE_PASSWORD`
@@ -60,6 +60,19 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 > Also keep mirrored secrets identical:
 > - `JWT_SECRET` = `JWT__Secret`
 > - `INTERNAL_SERVICE_SECRET` = `Spring__InternalSecret` = `Node__InternalSecret`
+
+Before running quickstart, create your local env file first:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then confirm/edit key values in `.env`:
+
+- `VAULT_ADDR`
+- `VAULT_DOCKER_ADDR`
+- `VAULT_KV_PATH=eventzen/ez-secrets`
+- `MYSQL_ROOT_PASSWORD` (must match Vault secrets)
 
 Before running quickstart, create your local secrets file first:
 
@@ -72,6 +85,17 @@ Then fill your real values (SMTP/Polar/etc.) in `vault-secrets.local.json` and r
 ```powershell
 ./scripts/quickstart.ps1 -Detach
 ```
+
+> [!TIP]
+> `quickstart.ps1` auto-resolves busy host ports before compose starts.
+> If a configured host port is already in use, it updates `.env` to the next free port for:
+> - `GATEWAY_HOST_PORT`, `MONGO_HOST_PORT`, `MYSQL_HOST_PORT`
+> - `MINIO_API_HOST_PORT`, `MINIO_CONSOLE_HOST_PORT`
+> - `KAFKA_HOST_PORT`, `PROMETHEUS_HOST_PORT`, `GRAFANA_HOST_PORT`
+>
+> It also updates `GATEWAY_HEALTH_URL` (and related localhost gateway URLs) to match the new gateway port.
+> The same remap behavior is available in `start-local.ps1`.
+> If you want strict fixed ports, run quickstart or start-local with `-SkipPortAutoResolve`.
 
 If your network is unstable while pulling images, use:
 
@@ -94,9 +118,10 @@ Optional dev-only fallback (not recommended for full feature testing):
 
 Manual setup still works and is fully supported. If you prefer explicit control, use the step-by-step flow below.
 
-## Setting up
+## Alternative Setup Paths
 
-> **Use this for the fastest local startup.**
+> **Use [Quick Start](#quick-start) for the fastest local startup.**
+> This section is for alternative/manual startup flows.
 > For full details and troubleshooting, see [`GETTING_STARTED.md`](GETTING_STARTED.md).
 
 ### 1) Prerequisites
@@ -234,10 +259,10 @@ docker compose up --build
 ### 7) Health check
 
 ```powershell
-curl.exe -fsS http://localhost:8080/health
+curl.exe -fsS $env:GATEWAY_HEALTH_URL
 ```
 
-The app opens at **http://localhost:8080**.
+The app opens at the URL mapped by `GATEWAY_HOST_PORT` (default: **http://localhost:8080**).
 
 Three demo users are seeded automatically on first startup by the `user-seed` container:
 
@@ -717,10 +742,10 @@ erDiagram
 
 | Endpoint | URL |
 |---|---|
-| App entry point | http://localhost:8080 |
-| Gateway health | http://localhost:8080/health |
-| Swagger UI | http://localhost:8080/swagger/ |
-| Aggregated OpenAPI | http://localhost:8080/openapi/eventzen-aggregated.yaml |
+| App entry point | http://localhost:${GATEWAY_HOST_PORT} (default `8080`) |
+| Gateway health | http://localhost:${GATEWAY_HOST_PORT}/health |
+| Swagger UI | http://localhost:${GATEWAY_HOST_PORT}/swagger/ |
+| Aggregated OpenAPI | http://localhost:${GATEWAY_HOST_PORT}/openapi/eventzen-aggregated.yaml |
 
 ### Internal Service Ports (Docker network)
 
@@ -743,7 +768,7 @@ erDiagram
 | Grafana UI | `3000` | `GRAFANA_HOST_PORT` |
 
 > [!NOTE]
-> The public gateway port is **fixed to 8080** in Compose. Internal service ports (`8081`/`8082`/`8083`) are kept stable for service-to-service URLs and health checks.
+> The public gateway port is controlled by `GATEWAY_HOST_PORT` (default `8080`) and may be auto-remapped by startup scripts when busy. Internal service ports (`8081`/`8082`/`8083`) stay stable for service-to-service URLs and health checks.
 
 ---
 
@@ -778,13 +803,13 @@ Prometheus and Grafana are included in Docker Compose for full-stack observabili
 
 | Resource | Location |
 |---|---|
-| Swagger UI | http://localhost:8080/swagger/ |
-| Aggregated OpenAPI spec | http://localhost:8080/openapi/eventzen-aggregated.yaml |
+| Swagger UI | http://localhost:${GATEWAY_HOST_PORT}/swagger/ |
+| Aggregated OpenAPI spec | http://localhost:${GATEWAY_HOST_PORT}/openapi/eventzen-aggregated.yaml |
 | Postman collection | `EventZen_Full_Application.postman_collection.json` |
 | Endpoint inventory | [`docs/Endpoints.md`](docs/Endpoints.md) |
 
 > [!TIP]
-> **Postman quick start:** Set the `baseUrl` variable to `http://localhost:8080`. The collection includes auth, events, attendees, payments, and budget/report flows.
+> **Postman quick start:** Set the `baseUrl` variable to `http://localhost:<GATEWAY_HOST_PORT>` (default `8080`). The collection includes auth, events, attendees, payments, and budget/report flows.
 
 ---
 
