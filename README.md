@@ -154,22 +154,25 @@ vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
 vault kv get -mount=secret eventzen/ez-secrets
 ```
 
-### 6) Generate wrapped token
+### 6) Start the stack
 
-```powershell
-./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
-```
+> [!WARNING]
+> Each wrapped token is **single-use** — once consumed by startup, it cannot be reused. A fresh token must be generated before every `docker compose up`.
 
-> [!TIP]
-> After this step, `.env` should have a non-empty `VAULT_WRAPPED_SECRET_ID`.
-
-### 7) Start the stack
+**Option A (recommended):** Use the helper script, which generates a fresh wrapped token automatically, writes it to `.env`, starts compose, and clears the token afterwards:
 
 ```powershell
 ./scripts/start-local.ps1
 ```
 
-### 8) Health check
+**Option B (manual):** Generate a wrapped token yourself, then run compose:
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+docker compose up --build
+```
+
+### 7) Health check
 
 ```powershell
 curl.exe -fsS http://localhost:8080/health
@@ -177,7 +180,15 @@ curl.exe -fsS http://localhost:8080/health
 
 The app opens at **http://localhost:8080**.
 
-### 9) Troubleshooting
+Three demo users are seeded automatically on first startup by the `user-seed` container:
+
+| Email | Role | Password |
+|---|---|---|
+| `admin@ez.local` | ADMIN | `Eventzen@2026!` |
+| `vendor@ez.local` | VENDOR | `Eventzen@2026!` |
+| `user@ez.local` | CUSTOMER | `Eventzen@2026!` |
+
+### 8) Troubleshooting
 
 <details>
 <summary>Health check failed? Expand for quick debug steps.</summary>
@@ -197,7 +208,7 @@ If a Vault / token error appears:
 
 </details>
 
-### 10) Stop safely
+### 9) Stop safely
 
 ```powershell
 docker compose down
