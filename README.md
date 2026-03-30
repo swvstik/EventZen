@@ -8,8 +8,6 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 
 ![EventZen Hero](docs/hero.png)
 
-
-
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
@@ -22,6 +20,8 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 </div>
 
 ---
+
+<p align="center"><a href="https://drive.google.com/file/d/1CjpBdCHB2xJgyvgHp-Yk9cbHp54BzyKc/view?usp=sharing"><strong>Watch Demo</strong></a></p>
 
 ## Table of Contents
 
@@ -50,6 +50,16 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 
 > [!IMPORTANT]
 > **Quick start everything (Vault + secrets + application) without the setup hassle:**
+
+> [!CAUTION]
+> Before running quickstart, keep these values aligned to avoid Spring/MySQL startup failures:
+> - `.env` -> `MYSQL_ROOT_PASSWORD`
+> - `vault-secrets.local.json` -> `MYSQL_ROOT_PASSWORD`
+> - `vault-secrets.local.json` -> `SPRING_DATASOURCE_PASSWORD`
+>
+> Also keep mirrored secrets identical:
+> - `JWT_SECRET` = `JWT__Secret`
+> - `INTERNAL_SERVICE_SECRET` = `Spring__InternalSecret` = `Node__InternalSecret`
 
 Before running quickstart, create your local secrets file first:
 
