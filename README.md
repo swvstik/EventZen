@@ -6,16 +6,163 @@ behind a single Nginx gateway.
 
 ![EventZen Hero](docs/hero.png)
 
-## [FAST LINKS] Quick Links
+## Quick Setup
 
-- App: http://localhost:8080
-- Gateway Health: http://localhost:8080/health
-- Swagger UI: http://localhost:8080/swagger/
-- Aggregated OpenAPI: http://localhost:8080/openapi/eventzen-aggregated.yaml
-- Root Postman Collection: [EventZen_Full_Application.postman_collection.json](EventZen_Full_Application.postman_collection.json)
-- Full Setup Guide: [GETTING_STARTED.md](GETTING_STARTED.md)
+Use this for the fastest local startup.
+For full details and troubleshooting, see `GETTING_STARTED.md`.
 
-## [ARCH] Architecture
+### 1) Prerequisites
+
+```powershell
+docker --version
+docker compose version
+vault --version
+curl.exe --version
+```
+
+All commands should return a version.
+
+### 2) Create local env file
+
+```powershell
+Copy-Item .env.example .env
+```
+
+In `.env`, confirm these values:
+
+- `VAULT_ADDR`
+- `VAULT_DOCKER_ADDR`
+- `VAULT_KV_MOUNT=secret`
+- `VAULT_KV_PATH=eventzen/ez-secrets` (keep this exact path)
+- `EZ_VAULT_WRAP_PATH=auth/token/create`
+
+### 3) Vault setup (choose one)
+
+Option A: Start local dev Vault in Docker
+
+```powershell
+docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
+```
+
+If already created:
+
+```powershell
+docker start eventzen-vault
+```
+
+Then set CLI env:
+
+```powershell
+$env:VAULT_ADDR = "http://127.0.0.1:8200"
+$env:VAULT_TOKEN = "root-dev-token"
+```
+
+**OR**
+
+Option B: Use existing/external Vault
+
+- Set `.env` `VAULT_ADDR` to your real Vault URL.
+- Set `.env` `VAULT_DOCKER_ADDR` to a container-reachable Vault URL.
+- Set shell `VAULT_TOKEN` to a valid token for your secret path.
+
+### 4) Quick Vault sanity + mount check
+
+```powershell
+vault status
+vault secrets list
+```
+
+If `secret/` is missing, create it:
+
+```powershell
+vault secrets enable -path=secret kv-v2
+```
+
+Vault should be unsealed and `secret/` should exist.
+
+### 5) Copy template secrets and load path
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+```
+
+Edit `vault-secrets.local.json` with your real values.
+
+Load and verify:
+
+```powershell
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+vault kv get -mount=secret eventzen/ez-secrets
+```
+
+You should see keys at `secret/eventzen/ez-secrets`.
+
+### 6) Generate wrapped token into `.env`
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+```
+
+`.env` should now have a non-empty `VAULT_WRAPPED_SECRET_ID`.
+
+### 7) Start stack
+
+```powershell
+./scripts/start-local.ps1
+```
+
+### 8) Health check with curl
+
+```powershell
+curl.exe -fsS http://localhost:8080/health
+```
+
+Response should show healthy status, and the app should open at `http://localhost:8080`.
+
+### 9) If health fails (quick fallback)
+
+```powershell
+docker compose ps
+docker compose logs --tail=120 nginx-gateway
+docker compose logs --tail=120 node-service spring-service dotnet-service
+```
+
+If Vault/token error appears:
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+./scripts/start-local.ps1
+```
+
+### 10) Stop safely
+
+```powershell
+docker compose down
+```
+
+Full local reset (removes DB volumes):
+
+```powershell
+docker compose down -v
+```
+
+## Table of Contents
+
+- [Quick Setup](#quick-setup)
+- [Architecture](#architecture)
+- [System Flow](#system-flow)
+- [Database ER Diagrams](#database-er-diagrams)
+- [Repository Structure](#repository-structure)
+- [Runtime Ports and Services](#runtime-ports-and-services)
+- [Monitoring](#monitoring)
+- [API Docs and Testing](#api-docs-and-testing)
+- [Local Development (Without Full Compose)](#local-development-without-full-compose)
+- [API Routing Through Gateway](#api-routing-through-gateway)
+- [Testing and Quality Gate](#testing-and-quality-gate)
+- [Service Documentation](#service-documentation)
+- [Tech Stack](#tech-stack)
+
+## Architecture
 
 - Frontend: React + Vite
 - API Gateway: Nginx
@@ -30,7 +177,7 @@ behind a single Nginx gateway.
 	- MinIO (object storage for media)
 	- Prometheus + Grafana (health/metrics monitoring)
 
-## [ARCH] Request Flow
+## System Flow
 
 ```mermaid
 flowchart LR
@@ -57,36 +204,7 @@ flowchart LR
 	GF[Grafana] --> P
 ```
 
-## [ARCH] Service Overview Diagram
-
-Source file: [docs/architecture-overview.mmd](docs/architecture-overview.mmd)
-
-```mermaid
-flowchart LR
-	B[Browser] --> G[Nginx Gateway :8080]
-	G --> N[Node Service :8081]
-	G --> S[Spring Service :8082]
-	G --> D[.NET Service :8083]
-
-	N --> MN[(MongoDB: eventzen_node)]
-	D --> MB[(MongoDB: eventzen_budget)]
-	S --> MY[(MySQL: eventzen)]
-
-	N <--> K[(Redpanda/Kafka)]
-	S <--> K
-	D <--> K
-
-	G --> M[(MinIO via /media)]
-```
-
-## [DOCS] Visuals and ERDs
-
-- Hero image: [docs/hero.png](docs/hero.png)
-- Service overview source: [docs/architecture-overview.mmd](docs/architecture-overview.mmd)
-- MySQL ERD source: [docs/ERD.mysql.mmd](docs/ERD.mysql.mmd)
-- MongoDB ERD source: [docs/ERD.mongodb.mmd](docs/ERD.mongodb.mmd)
-
-## [DOCS] Mermaid Diagrams
+## Database ER Diagrams
 
 <details>
 <summary>MySQL ERD (Spring Domain)</summary>
@@ -334,7 +452,7 @@ erDiagram
 
 </details>
 
-## [REPO] Repository Structure
+## Repository Structure
 
 ```text
 .
@@ -357,7 +475,7 @@ erDiagram
 └─ vault-secrets.example.json
 ```
 
-## [RUNTIME] What Runs Where
+## Runtime Ports and Services
 
 - Public entry point: http://localhost:8080
 - Gateway health: http://localhost:8080/health
@@ -389,7 +507,7 @@ Port configuration policy:
 	- GRAFANA_HOST_PORT
 - Internal service ports (8081/8082/8083) are kept stable for service-to-service URLs and health checks.
 
-## [OBSERVABILITY] Monitoring
+## Monitoring
 
 Prometheus and Grafana are included in Docker Compose for application and infrastructure monitoring.
 
@@ -413,158 +531,19 @@ Monitored targets include:
 
 See `monitoring/README.md` for details.
 
-## [SETUP] Quick Setup
-
-Use this for the fastest local startup.
-For full details and troubleshooting, see `GETTING_STARTED.md`.
-
-### 1) Prerequisites
-
-```powershell
-docker --version
-docker compose version
-vault --version
-curl.exe --version
-```
-
-All commands should return a version.
-
-### 2) Create local env file
-
-```powershell
-Copy-Item .env.example .env
-```
-
-In `.env`, confirm these values:
-
-- `VAULT_ADDR`
-- `VAULT_DOCKER_ADDR`
-- `VAULT_KV_MOUNT=secret`
-- `VAULT_KV_PATH=eventzen/ez-secrets` (keep this exact path)
-- `EZ_VAULT_WRAP_PATH=auth/token/create`
-
-### 3) Vault setup (choose one)
-
-Option A: Start local dev Vault in Docker
-
-```powershell
-docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
-```
-
-If already created:
-
-```powershell
-docker start eventzen-vault
-```
-
-Then set CLI env:
-
-```powershell
-$env:VAULT_ADDR = "http://127.0.0.1:8200"
-$env:VAULT_TOKEN = "root-dev-token"
-```
-
-**OR**
-
-Option B: Use existing/external Vault
-
-- Set `.env` `VAULT_ADDR` to your real Vault URL.
-- Set `.env` `VAULT_DOCKER_ADDR` to a container-reachable Vault URL.
-- Set shell `VAULT_TOKEN` to a valid token for your secret path.
-
-### 4) Quick Vault sanity + mount check
-
-```powershell
-vault status
-vault secrets list
-```
-
-If `secret/` is missing, create it:
-
-```powershell
-vault secrets enable -path=secret kv-v2
-```
-
-Vault should be unsealed and `secret/` should exist.
-
-### 5) Copy template secrets and load path
-
-```powershell
-Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
-```
-
-Edit `vault-secrets.local.json` with your real values.
-
-Load and verify:
-
-```powershell
-vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
-vault kv get -mount=secret eventzen/ez-secrets
-```
-
-You should see keys at `secret/eventzen/ez-secrets`.
-
-### 6) Generate wrapped token into `.env`
-
-```powershell
-./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
-```
-
-`.env` should now have a non-empty `VAULT_WRAPPED_SECRET_ID`.
-
-### 7) Start stack
-
-```powershell
-./scripts/start-local.ps1
-```
-
-### 8) Health check with curl
-
-```powershell
-curl.exe -fsS http://localhost:8080/health
-```
-
-Response should show healthy status, and the app should open at `http://localhost:8080`.
-
-### 9) If health fails (quick fallback)
-
-```powershell
-docker compose ps
-docker compose logs --tail=120 nginx-gateway
-docker compose logs --tail=120 node-service spring-service dotnet-service
-```
-
-If Vault/token error appears:
-
-```powershell
-./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
-./scripts/start-local.ps1
-```
-
-### 10) Stop safely
-
-```powershell
-docker compose down
-```
-
-Full local reset (removes DB volumes):
-
-```powershell
-docker compose down -v
-```
-
-## [TEST] API Docs and Testing
+## API Docs and Testing
 
 - Gateway Swagger UI: `http://localhost:8080/swagger/`
 - Aggregated OpenAPI spec: `http://localhost:8080/openapi/eventzen-aggregated.yaml`
 - Root Postman collection: `EventZen_Full_Application.postman_collection.json`
+- Endpoint inventory doc: `mydocs/Endpoints.md`
 
 Postman quick note:
 
 - Set `baseUrl` to `http://localhost:8080`
 - Collection includes auth, events, attendees, payments, and budget/report flows.
 
-## [DEV] Local Development (Without Full Compose)
+## Local Development (Without Full Compose)
 
 Use this mode if you want to run services individually.
 
@@ -599,7 +578,7 @@ dotnet restore
 dotnet run
 ```
 
-## [GATEWAY] API Routing Through Gateway
+## API Routing Through Gateway
 
 The gateway forwards requests as follows:
 
@@ -611,12 +590,30 @@ The gateway forwards requests as follows:
 - `/swagger/`, `/openapi/eventzen-aggregated.yaml` -> static docs served by gateway
 - Non-API routes -> React SPA static build
 
+### Gateway Route Map
+
+```mermaid
+flowchart LR
+	U[User Browser] --> G[Nginx Gateway :8080]
+	G --> N[Node Service]
+	G --> S[Spring Service]
+	G --> D[.NET Service]
+	G --> M[MinIO /media]
+	G --> X[Swagger/OpenAPI Docs]
+
+	N --- N1[/api/auth, /api/attendees, /api/notifications/]
+	N --- N2[/api/users, /api/uploads, /api/payments/]
+	N --- N3[/api/reviews, vendor-application routes/]
+	S --- S1[/api/events, /api/venues, /api/schedule/]
+	D --- D1[/api/budget, /api/reports/]
+```
+
 Cancellation behavior:
 
 - When an admin changes an event status to `CANCELLED` (or a non-draft event is deleted), Spring now triggers attendee registration cancellation in the Node service.
 - This keeps event state and attendee/ticket state consistent across services.
 
-## [CI] Testing and Quality Gate
+## Testing and Quality Gate
 
 Run the repository-wide quality gate from project root:
 
@@ -639,7 +636,7 @@ To skip Kafka integration checks:
 ./scripts/run_quality_gate.ps1 -WithKafkaIntegration:$false
 ```
 
-## [DOCS] Service Documentation
+## Service Documentation
 
 - Node service docs: `server/backend-node/README.md`
 - Spring service docs: `server/backend-spring/README.md`
@@ -647,7 +644,7 @@ To skip Kafka integration checks:
 - Spring testing guide: `server/backend-spring/TESTING.md`
 - .NET testing guide: `server/backend-dotnet/TESTING.md`
 
-## [STACK] Tech Stack
+## Tech Stack
 
 - React 19 + Vite 8
 - Node.js 20

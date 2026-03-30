@@ -357,7 +357,7 @@ Mini steps:
 Health endpoint:
 
 ```powershell
-curl http://localhost:8080/health
+curl.exe -fsS http://localhost:8080/health
 ```
 
 Container status:
@@ -376,9 +376,15 @@ Expected key services:
 Useful UIs:
 
 - App: http://localhost:8080
+- Swagger UI: http://localhost:8080/swagger/
+- OpenAPI YAML: http://localhost:8080/openapi/eventzen-aggregated.yaml
 - Grafana: http://localhost:3000
 - Prometheus: http://localhost:9090
 - MinIO Console: http://localhost:9001
+
+Quick API test asset:
+
+- Root Postman collection: `EventZen_Full_Application.postman_collection.json`
 
 ## 8) Stop / Reset
 
