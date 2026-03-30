@@ -3,6 +3,8 @@ param(
     [string]$VaultToken = $(if ($env:VAULT_TOKEN) { $env:VAULT_TOKEN } else { "root-dev-token" }),
     [string]$Policy = "root",
     [string]$WrapTtl = "30m",
+    [int]$ComposeRetryCount = 2,
+    [int]$ComposeRetryDelaySeconds = 10,
     [switch]$Detach,
     [switch]$NoBuild,
     [switch]$KeepWrappedToken
@@ -40,6 +42,22 @@ function Get-HttpStatusCode {
     }
 
     return $null
+}
+
+function Show-ComposeFailureDiagnostics {
+    Write-Host "[start-local] docker compose failed. Collecting diagnostics..." -ForegroundColor Yellow
+
+    try {
+        & docker compose ps
+    } catch {
+        Write-Host "[start-local] Failed to run 'docker compose ps'." -ForegroundColor Yellow
+    }
+
+    try {
+        & docker compose logs --tail 120
+    } catch {
+        Write-Host "[start-local] Failed to read compose logs." -ForegroundColor Yellow
+    }
 }
 
 $vaultKvUri = "{0}/v1/{1}/data/{2}" -f $VaultAddr.TrimEnd('/'), $vaultKvMount.Trim('/'), $vaultKvPath.Trim('/')
@@ -144,9 +162,31 @@ try {
         $composeArgs += "-d"
     }
 
-    Write-Host "[start-local] Running: docker $($composeArgs -join ' ')"
-    & docker @composeArgs
-    if ($LASTEXITCODE -ne 0) {
+    if ($ComposeRetryCount -lt 0) {
+        throw "ComposeRetryCount must be 0 or greater."
+    }
+
+    if ($ComposeRetryDelaySeconds -lt 0) {
+        throw "ComposeRetryDelaySeconds must be 0 or greater."
+    }
+
+    $maxAttempts = $ComposeRetryCount + 1
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Host "[start-local] Running: docker $($composeArgs -join ' ') (attempt $attempt/$maxAttempts)"
+        & docker @composeArgs
+
+        if ($LASTEXITCODE -eq 0) {
+            break
+        }
+
+        if ($attempt -lt $maxAttempts) {
+            Show-ComposeFailureDiagnostics
+            Write-Host "[start-local] Compose failed. Retrying in $ComposeRetryDelaySeconds seconds..." -ForegroundColor Yellow
+            Start-Sleep -Seconds $ComposeRetryDelaySeconds
+            continue
+        }
+
+        Show-ComposeFailureDiagnostics
         throw "docker compose up failed with exit code $LASTEXITCODE"
     }
 } finally {

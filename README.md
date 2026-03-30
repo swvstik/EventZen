@@ -55,6 +55,12 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 ./scripts/quickstart.ps1 -Detach
 ```
 
+If your network is unstable while pulling images, use:
+
+```powershell
+./scripts/quickstart.ps1 -Detach -ComposeRetryCount 4 -ComposeRetryDelaySeconds 15
+```
+
 What this does for convenience:
 
 - Creates `.env` from `.env.example` if missing

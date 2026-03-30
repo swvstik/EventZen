@@ -67,6 +67,8 @@ The recommended way to start EventZen locally. Automatically:
 | `-Detach` | Run stack in the background (`docker compose up -d`) |
 | `-NoBuild` | Skip image rebuild (faster restart when code hasn't changed) |
 | `-KeepWrappedToken` | Leave `VAULT_WRAPPED_SECRET_ID` in `.env` after startup |
+| `-ComposeRetryCount` | Number of automatic compose retries on failure (default: `2`) |
+| `-ComposeRetryDelaySeconds` | Delay between retries in seconds (default: `10`) |
 
 ## quickstart.ps1
 
@@ -94,6 +96,8 @@ One-command bootstrap for local development from Vault setup to app startup.
 | `-NoBuild` | Skip image rebuild |
 | `-KeepWrappedToken` | Keep wrapped token in `.env` after startup |
 | `-SkipVaultContainer` | Skip starting/creating local Vault container (use external Vault) |
+| `-ComposeRetryCount` | Forwarded to `start-local.ps1`; compose retry attempts (default: `2`) |
+| `-ComposeRetryDelaySeconds` | Forwarded to `start-local.ps1`; delay between retries in seconds (default: `10`) |
 
 ## run_quality_gate.ps1
 

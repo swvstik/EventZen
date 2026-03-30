@@ -1,6 +1,8 @@
 param(
     [string]$VaultAddr = $(if ($env:VAULT_ADDR) { $env:VAULT_ADDR } else { "http://127.0.0.1:8200" }),
     [string]$VaultToken = $(if ($env:VAULT_TOKEN) { $env:VAULT_TOKEN } else { "root-dev-token" }),
+    [int]$ComposeRetryCount = 2,
+    [int]$ComposeRetryDelaySeconds = 10,
     [switch]$Detach,
     [switch]$NoBuild,
     [switch]$KeepWrappedToken,
@@ -157,6 +159,8 @@ Write-Host "[quickstart] Handing off to start-local script."
 $startArgs = @{
     VaultAddr = $VaultAddr
     VaultToken = $VaultToken
+    ComposeRetryCount = $ComposeRetryCount
+    ComposeRetryDelaySeconds = $ComposeRetryDelaySeconds
 }
 
 if ($Detach) { $startArgs.Detach = $true }
