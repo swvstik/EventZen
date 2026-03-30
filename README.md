@@ -4,7 +4,18 @@ EventZen is a polyglot event management platform built as a microservices system
 It combines a React frontend with Node.js, Spring Boot, and ASP.NET Core services
 behind a single Nginx gateway.
 
-## Architecture
+![EventZen Hero](docs/hero.png)
+
+## [FAST LINKS] Quick Links
+
+- App: http://localhost:8080
+- Gateway Health: http://localhost:8080/health
+- Swagger UI: http://localhost:8080/swagger/
+- Aggregated OpenAPI: http://localhost:8080/openapi/eventzen-aggregated.yaml
+- Root Postman Collection: [EventZen_Full_Application.postman_collection.json](EventZen_Full_Application.postman_collection.json)
+- Full Setup Guide: [GETTING_STARTED.md](GETTING_STARTED.md)
+
+## [ARCH] Architecture
 
 - Frontend: React + Vite
 - API Gateway: Nginx
@@ -19,7 +30,7 @@ behind a single Nginx gateway.
 	- MinIO (object storage for media)
 	- Prometheus + Grafana (health/metrics monitoring)
 
-## Request Flow
+## [ARCH] Request Flow
 
 ```mermaid
 flowchart LR
@@ -46,7 +57,36 @@ flowchart LR
 	GF[Grafana] --> P
 ```
 
-## Mermaid Diagrams
+## [ARCH] Service Overview Diagram
+
+Source file: [docs/architecture-overview.mmd](docs/architecture-overview.mmd)
+
+```mermaid
+flowchart LR
+	B[Browser] --> G[Nginx Gateway :8080]
+	G --> N[Node Service :8081]
+	G --> S[Spring Service :8082]
+	G --> D[.NET Service :8083]
+
+	N --> MN[(MongoDB: eventzen_node)]
+	D --> MB[(MongoDB: eventzen_budget)]
+	S --> MY[(MySQL: eventzen)]
+
+	N <--> K[(Redpanda/Kafka)]
+	S <--> K
+	D <--> K
+
+	G --> M[(MinIO via /media)]
+```
+
+## [DOCS] Visuals and ERDs
+
+- Hero image: [docs/hero.png](docs/hero.png)
+- Service overview source: [docs/architecture-overview.mmd](docs/architecture-overview.mmd)
+- MySQL ERD source: [docs/ERD.mysql.mmd](docs/ERD.mysql.mmd)
+- MongoDB ERD source: [docs/ERD.mongodb.mmd](docs/ERD.mongodb.mmd)
+
+## [DOCS] Mermaid Diagrams
 
 <details>
 <summary>MySQL ERD (Spring Domain)</summary>
@@ -294,11 +334,14 @@ erDiagram
 
 </details>
 
-## Repository Structure
+## [REPO] Repository Structure
 
 ```text
 .
+├─ Capstone.sln             # Solution entry for capstone workspace
 ├─ client/                 # React + Vite frontend
+├─ docs/                   # Hero image + Mermaid source diagrams
+├─ mydocs/                 # Team/project documentation (endpoints, runbooks, UML)
 ├─ server/
 │  ├─ backend-node/        # Node.js auth/attendees/notifications
 │  ├─ backend-spring/      # Spring Boot events/venues/schedule
@@ -307,17 +350,19 @@ erDiagram
 ├─ monitoring/             # Prometheus + Grafana dashboards/config
 ├─ scripts/                # Cross-service quality gate and utilities
 ├─ eventzen-docker/        # Docker environment notes
-├─ mydocs/                 # Project docs (ERD/endpoints)
 ├─ docker-compose.yml      # Full local stack (frontend + all backends + infra)
+├─ EventZen_Full_Application.postman_collection.json  # Root API test collection
 ├─ .env.example            # Required environment variables template
 ├─ GETTING_STARTED.md      # Full setup guide
 └─ vault-secrets.example.json
 ```
 
-## What Runs Where
+## [RUNTIME] What Runs Where
 
 - Public entry point: http://localhost:8080
 - Gateway health: http://localhost:8080/health
+- Gateway Swagger UI: http://localhost:8080/swagger/
+- Aggregated OpenAPI: http://localhost:8080/openapi/eventzen-aggregated.yaml
 - Internal backend container ports (Docker network only):
 	- Node service: 8081
 	- Spring service: 8082
@@ -344,7 +389,7 @@ Port configuration policy:
 	- GRAFANA_HOST_PORT
 - Internal service ports (8081/8082/8083) are kept stable for service-to-service URLs and health checks.
 
-## Monitoring
+## [OBSERVABILITY] Monitoring
 
 Prometheus and Grafana are included in Docker Compose for application and infrastructure monitoring.
 
@@ -368,92 +413,158 @@ Monitored targets include:
 
 See `monitoring/README.md` for details.
 
-## Quick Start (Docker, Recommended)
+## [SETUP] Quick Setup
 
-If you want a full beginner-friendly walkthrough, follow `GETTING_STARTED.md`.
+Use this for the fastest local startup.
+For full details and troubleshooting, see `GETTING_STARTED.md`.
 
-### 1. Prepare environment
+### 1) Prerequisites
 
-```bash
-cp .env.example .env
+```powershell
+docker --version
+docker compose version
+vault --version
+curl.exe --version
 ```
 
-On Windows PowerShell:
+All commands should return a version.
+
+### 2) Create local env file
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set at least:
+In `.env`, confirm these values:
 
-- Vault connectivity variables (`VAULT_ADDR`, `VAULT_*`)
-- Container-side Vault address (`VAULT_DOCKER_ADDR`) for Docker networking
-- Wrapped SecretID placeholder (`VAULT_WRAPPED_SECRET_ID`)
-- Infra secrets still used by third-party images (`MYSQL_ROOT_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`)
+- `VAULT_ADDR`
+- `VAULT_DOCKER_ADDR`
+- `VAULT_KV_MOUNT=secret`
+- `VAULT_KV_PATH=eventzen/ez-secrets` (keep this exact path)
+- `EZ_VAULT_WRAP_PATH=auth/token/create`
 
-Use `vault-secrets.example.json` as your key template and create/update these values directly in the Vault UI at `secret/eventzen/ez-secrets`.
+### 3) Vault setup (choose one)
 
-Generate one wrapped token in your Vault client for that secret access scope, then paste it into `.env`:
+Option A: Start local dev Vault in Docker
 
-- `VAULT_WRAPPED_SECRET_ID=<wrapped-token>`
-
-Generate a fresh wrapped token before each `docker compose up` because wrapped tokens are single-use and short-lived.
-
-### 2. Build and start everything
-
-```bash
-docker compose up --build
+```powershell
+docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
 ```
 
-Or use the one-command helper (generates a fresh wrapped token automatically):
+If already created:
+
+```powershell
+docker start eventzen-vault
+```
+
+Then set CLI env:
+
+```powershell
+$env:VAULT_ADDR = "http://127.0.0.1:8200"
+$env:VAULT_TOKEN = "root-dev-token"
+```
+
+**OR**
+
+Option B: Use existing/external Vault
+
+- Set `.env` `VAULT_ADDR` to your real Vault URL.
+- Set `.env` `VAULT_DOCKER_ADDR` to a container-reachable Vault URL.
+- Set shell `VAULT_TOKEN` to a valid token for your secret path.
+
+### 4) Quick Vault sanity + mount check
+
+```powershell
+vault status
+vault secrets list
+```
+
+If `secret/` is missing, create it:
+
+```powershell
+vault secrets enable -path=secret kv-v2
+```
+
+Vault should be unsealed and `secret/` should exist.
+
+### 5) Copy template secrets and load path
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+```
+
+Edit `vault-secrets.local.json` with your real values.
+
+Load and verify:
+
+```powershell
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+vault kv get -mount=secret eventzen/ez-secrets
+```
+
+You should see keys at `secret/eventzen/ez-secrets`.
+
+### 6) Generate wrapped token into `.env`
+
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+```
+
+`.env` should now have a non-empty `VAULT_WRAPPED_SECRET_ID`.
+
+### 7) Start stack
 
 ```powershell
 ./scripts/start-local.ps1
 ```
 
-This command builds and installs dependencies for all services, including the
-frontend build that is bundled into the Nginx gateway image.
+### 8) Health check with curl
 
-On startup, Compose also runs an idempotent `user-seed` job that upserts default
-test users into MongoDB, so no manual seeding step is required.
-
-Default test users:
-
-- `admin@ez.local` (ADMIN)
-- `vendor@ez.local` (VENDOR)
-- `user@ez.local` (CUSTOMER)
-- Password for all: `Eventzen@2026!` (override with `TEST_USER_PASSWORD`)
-
-If you need to re-run seeding manually:
-
-```bash
-docker compose run --rm user-seed
+```powershell
+curl.exe -fsS http://localhost:8080/health
 ```
 
-### 3. Verify health
+Response should show healthy status, and the app should open at `http://localhost:8080`.
 
-```bash
-curl http://localhost:8080/health
+### 9) If health fails (quick fallback)
+
+```powershell
+docker compose ps
+docker compose logs --tail=120 nginx-gateway
+docker compose logs --tail=120 node-service spring-service dotnet-service
 ```
 
-Expected response: JSON status from `nginx-gateway`.
+If Vault/token error appears:
 
-### 4. Stop stack
+```powershell
+./scripts/generate-vault-wrapped-token.ps1 -UpdateEnv
+./scripts/start-local.ps1
+```
 
-```bash
+### 10) Stop safely
+
+```powershell
 docker compose down
 ```
 
-Remove containers and volumes:
+Full local reset (removes DB volumes):
 
-```bash
+```powershell
 docker compose down -v
 ```
 
-`docker compose down -v` removes persisted databases; next startup will seed
-the default users again.
+## [TEST] API Docs and Testing
 
-## Local Development (Without Full Compose)
+- Gateway Swagger UI: `http://localhost:8080/swagger/`
+- Aggregated OpenAPI spec: `http://localhost:8080/openapi/eventzen-aggregated.yaml`
+- Root Postman collection: `EventZen_Full_Application.postman_collection.json`
+
+Postman quick note:
+
+- Set `baseUrl` to `http://localhost:8080`
+- Collection includes auth, events, attendees, payments, and budget/report flows.
+
+## [DEV] Local Development (Without Full Compose)
 
 Use this mode if you want to run services individually.
 
@@ -488,14 +599,16 @@ dotnet restore
 dotnet run
 ```
 
-## API Routing Through Gateway
+## [GATEWAY] API Routing Through Gateway
 
 The gateway forwards requests as follows:
 
-- `/api/auth`, `/api/attendees`, `/api/notifications`, `/api/users`, `/api/uploads`, `/api/payments`, vendor-application routes -> Node service
+- `/api/auth`, `/api/attendees`, `/api/notifications`, `/api/users`, `/api/uploads`, `/api/payments` -> Node service
+- `/api/reviews`, `/api/vendor-applications`, `/api/admin/vendor-applications` -> Node service
 - `/api/events`, `/api/venues`, `/api/schedule` -> Spring service
 - `/api/budget`, `/api/reports` -> .NET service
 - `/media` -> MinIO
+- `/swagger/`, `/openapi/eventzen-aggregated.yaml` -> static docs served by gateway
 - Non-API routes -> React SPA static build
 
 Cancellation behavior:
@@ -503,7 +616,7 @@ Cancellation behavior:
 - When an admin changes an event status to `CANCELLED` (or a non-draft event is deleted), Spring now triggers attendee registration cancellation in the Node service.
 - This keeps event state and attendee/ticket state consistent across services.
 
-## Testing and Quality Gate
+## [CI] Testing and Quality Gate
 
 Run the repository-wide quality gate from project root:
 
@@ -526,7 +639,7 @@ To skip Kafka integration checks:
 ./scripts/run_quality_gate.ps1 -WithKafkaIntegration:$false
 ```
 
-## Service Documentation
+## [DOCS] Service Documentation
 
 - Node service docs: `server/backend-node/README.md`
 - Spring service docs: `server/backend-spring/README.md`
@@ -534,7 +647,7 @@ To skip Kafka integration checks:
 - Spring testing guide: `server/backend-spring/TESTING.md`
 - .NET testing guide: `server/backend-dotnet/TESTING.md`
 
-## Tech Stack
+## [STACK] Tech Stack
 
 - React 19 + Vite 8
 - Node.js 20

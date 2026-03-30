@@ -51,14 +51,16 @@ GET http://localhost:8083/health
 
 Swagger UI is also available at: `http://localhost:8083/swagger`
 
+Note: Swagger is enabled only when the .NET service runs in Development environment.
+
 ---
 
 ## Part 2 — Budget CRUD
 
-### 2.1 Create budget (ORGANIZER or ADMIN)
+### 2.1 Create budget (VENDOR or ADMIN)
 ```
 POST {{base_url_dotnet}}/api/budget/events/{{event_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 Content-Type: application/json
 
 {
@@ -78,12 +80,12 @@ Content-Type: application/json
 → **Must return `401`**
 
 **Try as USER role:**
-→ **Must return `403`** `"Access denied. Requires ORGANIZER or ADMIN role."`
+→ **Must return `403`** `"Access denied. Requires VENDOR or ADMIN role."`
 
 ### 2.2 Get budget summary
 ```
 GET {{base_url_dotnet}}/api/budget/events/{{event_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 ```
 → `200` with:
 ```json
@@ -120,7 +122,7 @@ Content-Type: application/json
 ### 3.1 Add expenses
 ```
 POST {{base_url_dotnet}}/api/budget/events/{{event_id}}/expenses
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 Content-Type: application/json
 
 {
@@ -161,14 +163,14 @@ Add more expenses to test the report:
 ### 3.2 Get all expenses
 ```
 GET {{base_url_dotnet}}/api/budget/events/{{event_id}}/expenses
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 ```
 → `200` with array of expenses, sorted by expenseDate desc.
 
 ### 3.3 Update an expense
 ```
 PUT {{base_url_dotnet}}/api/budget/expenses/{{expense_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 Content-Type: application/json
 
 {
@@ -181,7 +183,7 @@ Content-Type: application/json
 ### 3.4 Delete an expense
 ```
 DELETE {{base_url_dotnet}}/api/budget/expenses/{{expense_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 ```
 → `200` `"Expense deleted."`
 
@@ -209,7 +211,7 @@ Add a big expense to push past 90%:
 Now get the summary:
 ```
 GET {{base_url_dotnet}}/api/budget/events/{{event_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 ```
 → `overspendWarning: true` ⭐ (total spent > 90% of 750000)
 
@@ -219,7 +221,7 @@ Authorization: Bearer {{organizer_token}}
 
 ```
 GET {{base_url_dotnet}}/api/reports/events/{{event_id}}
-Authorization: Bearer {{organizer_token}}
+Authorization: Bearer {{vendor_token}}
 ```
 
 Expected response shape:
@@ -272,12 +274,12 @@ Valid values are: `VENUE`, `CATERING`, `MARKETING`, `STAFF`, `AV_EQUIPMENT`, `DE
 
 | Method | URL | Auth |
 |---|---|---|
-| POST | `/api/budget/events/:eventId` | ORG/ADMIN |
-| GET | `/api/budget/events/:eventId` | ORG/ADMIN |
-| PUT | `/api/budget/events/:eventId` | ORG/ADMIN |
-| POST | `/api/budget/events/:eventId/expenses` | ORG/ADMIN |
-| GET | `/api/budget/events/:eventId/expenses` | ORG/ADMIN |
-| PUT | `/api/budget/expenses/:id` | ORG/ADMIN |
-| DELETE | `/api/budget/expenses/:id` | ORG/ADMIN |
-| GET | `/api/reports/events/:eventId` | ORG/ADMIN |
+| POST | `/api/budget/events/:eventId` | VENDOR/ADMIN |
+| GET | `/api/budget/events/:eventId` | VENDOR/ADMIN |
+| PUT | `/api/budget/events/:eventId` | VENDOR/ADMIN |
+| POST | `/api/budget/events/:eventId/expenses` | VENDOR/ADMIN |
+| GET | `/api/budget/events/:eventId/expenses` | VENDOR/ADMIN |
+| PUT | `/api/budget/expenses/:id` | VENDOR/ADMIN |
+| DELETE | `/api/budget/expenses/:id` | VENDOR/ADMIN |
+| GET | `/api/reports/events/:eventId` | VENDOR/ADMIN |
 | GET | `/health` | Public |

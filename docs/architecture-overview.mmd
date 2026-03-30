@@ -1,0 +1,15 @@
+flowchart LR
+    B[Browser] --> G[Nginx Gateway :8080]
+    G --> N[Node Service :8081]
+    G --> S[Spring Service :8082]
+    G --> D[.NET Service :8083]
+
+    N --> MN[(MongoDB: eventzen_node)]
+    D --> MB[(MongoDB: eventzen_budget)]
+    S --> MY[(MySQL: eventzen)]
+
+    N <--> K[(Redpanda/Kafka)]
+    S <--> K
+    D <--> K
+
+    G --> M[(MinIO via /media)]

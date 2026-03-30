@@ -1,0 +1,152 @@
+erDiagram
+    NODE_USERS {
+        string _id PK
+        string name
+        string email UK
+        string password_hash
+        string phone_number
+        string role
+        boolean is_email_verified
+        string avatar_url
+        string avatar_object_name
+        datetime created_at
+        datetime updated_at
+    }
+
+    NODE_EMAIL_OTPS {
+        string _id PK
+        string email
+        string otp_hash
+        string otp_legacy
+        datetime expires_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    NODE_PASSWORD_RESET_TOKENS {
+        string _id PK
+        objectId user_id FK
+        string token_hash UK
+        string token_legacy UK
+        datetime expires_at
+    }
+
+    NODE_REFRESH_TOKENS {
+        string _id PK
+        objectId user_id FK
+        string token_hash UK
+        string token_legacy UK
+        datetime expires_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    NODE_REGISTRATIONS {
+        string _id PK
+        string user_id FK
+        string event_id
+        string tier_id
+        string tier_name
+        decimal ticket_unit_price
+        string ticket_currency
+        int quantity
+        string status
+        int waitlist_position
+        string qr_token UK
+        string qr_data_uri
+        datetime registered_at
+    }
+
+    NODE_REVIEWS {
+        string _id PK
+        string user_id FK
+        string user_name
+        string user_avatar_url
+        string event_id
+        int rating
+        string comment
+        datetime created_at
+    }
+
+    NODE_NOTIFICATIONS {
+        string _id PK
+        string user_id FK
+        string event_id
+        string type
+        string message
+        boolean is_read
+        datetime sent_at
+    }
+
+    NODE_PAYMENTS {
+        string _id PK
+        string user_id FK
+        string user_email
+        string event_id
+        string tier_id
+        int quantity
+        string currency
+        int subtotal_minor
+        int platform_fee_minor
+        int amount_minor
+        string idempotency_key UK
+        string polar_checkout_id UK
+        string polar_order_id UK
+        string polar_status
+        string status
+        datetime completed_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    NODE_VENDOR_APPLICATIONS {
+        string _id PK
+        string user_id FK
+        string business_name
+        string service_types
+        string portfolio_url
+        string notes
+        string status
+        string reviewed_by_user_id
+        string review_reason
+        datetime reviewed_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    BUDGET_EVENT_BUDGETS {
+        string _id PK
+        string event_id UK
+        decimal total_allocated
+        string currency
+        datetime created_at
+        string created_by_user_id
+        string owner_vendor_user_id
+    }
+
+    BUDGET_EXPENSES {
+        string _id PK
+        string budget_id FK
+        string category
+        string description
+        decimal amount
+        string vendor_id
+        datetime expense_date
+        string added_by_user_id
+        boolean is_auto_allocated
+        string allocation_source
+        string source_booking_id
+        datetime allocation_timestamp
+        datetime created_at
+    }
+
+    NODE_USERS ||--o{ NODE_PASSWORD_RESET_TOKENS : owns
+    NODE_USERS ||--o{ NODE_REFRESH_TOKENS : owns
+    NODE_USERS ||--o{ NODE_REGISTRATIONS : registers
+    NODE_USERS ||--o{ NODE_REVIEWS : writes
+    NODE_USERS ||--o{ NODE_NOTIFICATIONS : receives
+    NODE_USERS ||--o{ NODE_PAYMENTS : initiates
+    NODE_USERS ||--o{ NODE_VENDOR_APPLICATIONS : submits
+    NODE_USERS ||--o{ NODE_EMAIL_OTPS : verifies
+
+    BUDGET_EVENT_BUDGETS ||--o{ BUDGET_EXPENSES : contains

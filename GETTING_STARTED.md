@@ -132,12 +132,26 @@ Mini steps:
 1. Start Vault.
 2. Point local Vault CLI to it.
 3. Verify host and container network reachability.
+4. Verify token login and KV mount access before moving forward.
+
+Choose one mode:
+
+- Mode A: Dockerized Vault (container)
+- Mode B: External Vault process on this same machine (non-Docker)
 
 Quick local Vault container:
 
 ```powershell
 docker run --name eventzen-vault -d --cap-add=IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=root-dev-token -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 -p 8200:8200 hashicorp/vault:1.16
 ```
+
+External Vault process on host (Windows PowerShell):
+
+```powershell
+vault server -dev -dev-root-token-id="root-dev-token" -dev-listen-address="0.0.0.0:8200"
+```
+
+Keep that terminal running while you work.
 
 Configure CLI environment:
 
@@ -147,10 +161,39 @@ $env:VAULT_TOKEN = "root-dev-token"
 vault status
 ```
 
+If you are using external Vault on a different host port, update both values:
+
+```dotenv
+VAULT_ADDR=http://127.0.0.1:<your-port>
+VAULT_DOCKER_ADDR=http://host.docker.internal:<your-port>
+```
+
+If the container already exists but is stopped:
+
+```powershell
+docker start eventzen-vault
+```
+
+If you get `connectex: actively refused` on port 8200:
+
+1. Start Docker Desktop first.
+2. Re-run `docker start eventzen-vault` or the `docker run ...` command above.
+3. Re-check with `vault status`.
+
 Verify containers can reach Vault:
 
 ```powershell
 docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
+```
+
+For a custom external Vault port, replace `8200` in the command above.
+
+Verify Vault token and KV visibility:
+
+```powershell
+vault token lookup
+vault secrets list
+vault kv list secret/
 ```
 
 ## 3) Prepare .env
@@ -201,6 +244,7 @@ Mini steps:
 2. Open path `eventzen/ez-secrets`.
 3. Copy every key from `vault-secrets.example.json`.
 4. Save and re-check key spelling.
+5. Read back the path to confirm data is written.
 
 Use `vault-secrets.example.json` as the required key list.
 
@@ -215,6 +259,26 @@ Then in Vault UI:
 1. Open KV v2 mount `secret`.
 2. Create or edit path `eventzen/ez-secrets`.
 3. Add all keys from `vault-secrets.example.json` with real values.
+
+CLI option (faster): load JSON file directly into Vault path
+
+```powershell
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.example.json
+```
+
+Recommended safer workflow (do not edit example in place):
+
+```powershell
+Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
+notepad .\vault-secrets.local.json
+vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
+```
+
+Verify stored values:
+
+```powershell
+vault kv get -mount=secret eventzen/ez-secrets
+```
 
 Rules:
 
@@ -356,6 +420,22 @@ Common failure: Vault not reachable from containers
 
 ```powershell
 docker run --rm curlimages/curl:8.12.1 curl -fsS http://host.docker.internal:8200/v1/sys/health
+```
+
+Common failure: Vault login/token issues
+
+- Check:
+
+```powershell
+vault status
+vault token lookup
+```
+
+- Re-authenticate for local dev container:
+
+```powershell
+$env:VAULT_ADDR = "http://127.0.0.1:8200"
+vault login root-dev-token
 ```
 
 Common failure: app services never start

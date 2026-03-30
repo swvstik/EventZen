@@ -6,14 +6,18 @@
 Run unit and service tests:
 
 ```bash
-mvn test -DskipITs
+mvn verify -DskipITs
 ```
 
 Run broker-backed Kafka integration test (requires broker at localhost:9094):
 
 ```bash
-RUN_KAFKA_INTEGRATION=true KAFKA_BOOTSTRAP_SERVERS=localhost:9094 mvn test -DskipITs
+RUN_KAFKA_INTEGRATION=true KAFKA_BOOTSTRAP_SERVERS=localhost:9094 mvn verify -DskipITs
 ```
+
+Role model note:
+- This repository currently uses `VENDOR`, `ADMIN`, and `USER` roles.
+- If older sections mention `ORGANIZER`, treat that as legacy wording for `VENDOR`.
 
 Run only the admin cancellation cascade regression test:
 

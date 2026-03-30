@@ -122,7 +122,13 @@ const schema = z.object({
   tags: z.string().optional(),
   allowWaitlist: z.boolean().default(true),
   ticketTiers: z.array(tierSchema).min(1, 'At least one tier'),
-}).refine(d => !d.startTime || !d.endTime || d.endTime > d.startTime, {
+}).refine(
+  (d) =>
+    !d.startTime ||
+    !d.endTime ||
+    toTimestampFromEventWindow(d.endDate || d.eventDate, d.endTime, '23:59') >
+      toTimestampFromEventWindow(d.eventDate, d.startTime, '00:00'),
+  {
   message: 'End time must be after start time', path: ['endTime'],
 }).refine(d => !d.endDate || d.endDate >= d.eventDate, {
   message: 'End date must be on or after start date', path: ['endDate'],

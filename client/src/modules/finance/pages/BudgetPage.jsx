@@ -67,7 +67,14 @@ export default function BudgetPage() {
 
   const createBudgetMutation = useMutation({
     mutationFn: (data) => budgetApi.create(eventId, data),
-    onSuccess: () => { toast.success('Budget created!'); queryClient.invalidateQueries({ queryKey: ['budget', eventId] }); },
+    onSuccess: () => {
+      toast.success('Budget created!');
+      queryClient.invalidateQueries({ queryKey: ['budget', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['report', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['vendor-overview'] });
+    },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed'),
   });
 

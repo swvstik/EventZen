@@ -104,7 +104,7 @@ if ($WithKafkaIntegration) {
 }
 
 Invoke-Step -Name 'Node unit tests' -Action {
-  Invoke-Cmd -FilePath 'npm' -Arguments @('test') -WorkingDirectory (Join-Path $repoRoot 'server/backend-node')
+  Invoke-Cmd -FilePath 'npm' -Arguments @('run', 'test:coverage') -WorkingDirectory (Join-Path $repoRoot 'server/backend-node')
 }
 
 if ($WithKafkaIntegration) {
@@ -123,7 +123,7 @@ Invoke-Step -Name 'Spring tests' -Action {
     $envMap.KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers
   }
 
-  Invoke-Cmd -FilePath 'mvn' -Arguments @('test') -WorkingDirectory (Join-Path $repoRoot 'server/backend-spring') -Environment $envMap
+  Invoke-Cmd -FilePath 'mvn' -Arguments @('verify') -WorkingDirectory (Join-Path $repoRoot 'server/backend-spring') -Environment $envMap
 }
 
 Invoke-Step -Name '.NET tests' -Action {
@@ -133,7 +133,15 @@ Invoke-Step -Name '.NET tests' -Action {
     $envMap.KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers
   }
 
-  Invoke-Cmd -FilePath 'dotnet' -Arguments @('test', 'EventZen.Budget.Tests/EventZen.Budget.Tests.csproj') -WorkingDirectory (Join-Path $repoRoot 'server/backend-dotnet') -Environment $envMap
+  Invoke-Cmd -FilePath 'dotnet' -Arguments @(
+    'test',
+    'EventZen.Budget.Tests/EventZen.Budget.Tests.csproj',
+    '/p:CollectCoverage=true',
+    '/p:CoverletOutputFormat=cobertura',
+    '/p:Threshold=5',
+    '/p:ThresholdType=line',
+    '/p:ThresholdStat=total'
+  ) -WorkingDirectory (Join-Path $repoRoot 'server/backend-dotnet') -Environment $envMap
 }
 
 Invoke-Step -Name 'Client lint' -Action {

@@ -8,17 +8,19 @@ const FOOTER_LINKS = [
 ];
 
 export default function Footer() {
+  const marqueeLine = '* DISCOVER * BOOK * CHECK IN * EVENTZEN * DISCOVER * BOOK * CHECK IN * EVENTZEN';
+
   return (
     <footer className="bg-neo-black text-neo-white border-t-4 border-neo-orange">
       {/* Marquee */}
       <div className="overflow-hidden border-b-3 border-neo-orange/35 py-3">
-        <div className="flex flex-wrap justify-center gap-x-8 gap-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
+        <div className="flex flex-col items-center gap-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
             <span
               key={i}
-              className="font-heading text-sm uppercase tracking-[0.3em] text-neo-yellow/80 whitespace-nowrap mx-8"
+              className="font-heading text-sm uppercase tracking-[0.3em] text-neo-yellow/80 whitespace-nowrap"
             >
-              * DISCOVER * BOOK * CHECK IN * EVENTZEN
+              {marqueeLine}
             </span>
           ))}
         </div>

@@ -321,7 +321,14 @@ public class BudgetService : IBudgetService
         if (totalVenueCost <= 0)
             return false;
 
-        var budget = await _budgets.FindByEventIdAsync(eventId, ct);
+        var budget = await _budgets.FindByEventIdAsync(eventId, ct)
+            ?? await GetOrCreateBudgetForEventAsync(
+                eventId: eventId,
+                ownerVendorUserId: vendorUserId,
+                createdByUserId: "system:kafka:venue-booking",
+                ct: ct
+            );
+
         if (budget is null)
             return false;
 
@@ -391,7 +398,17 @@ public class BudgetService : IBudgetService
         CancellationToken ct = default)
     {
         AssertVendorOrAdmin(role);
-        var budget = await GetBudgetOrThrowAsync(eventId, ct);
+        var eventInfo = await _eventOwnership.GetEventOwnershipAsync(eventId, ct);
+        if (IsVendor(role) && eventInfo.VendorUserId != userId)
+            throw new ForbiddenException("Vendors can only access finance data for their own events.");
+
+        var budget = await GetOrCreateBudgetForEventAsync(
+            eventId: eventId,
+            ownerVendorUserId: eventInfo.VendorUserId,
+            createdByUserId: IsAdmin(role) ? "system:auto-report-bootstrap" : userId,
+            ct: ct
+        ) ?? throw new NotFoundException($"No budget found for event {eventId}.");
+
         await AssertCanAccessBudgetAsync(budget, userId, role, ct);
         await EnsureVenueAllocationForBudgetAsync(budget, ct);
 
@@ -509,6 +526,45 @@ public class BudgetService : IBudgetService
     private async Task<EventBudget> GetBudgetOrThrowAsync(string eventId, CancellationToken ct)
         => await _budgets.FindByEventIdAsync(eventId, ct)
            ?? throw new NotFoundException($"No budget found for event {eventId}.");
+
+    private async Task<EventBudget?> GetOrCreateBudgetForEventAsync(
+        string eventId,
+        string? ownerVendorUserId,
+        string createdByUserId,
+        CancellationToken ct)
+    {
+        var existing = await _budgets.FindByEventIdAsync(eventId, ct);
+        if (existing is not null)
+            return existing;
+
+        var owner = ownerVendorUserId;
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            var eventInfo = await _eventOwnership.TryGetEventOwnershipAsync(eventId, ct);
+            owner = eventInfo?.VendorUserId;
+        }
+
+        if (string.IsNullOrWhiteSpace(owner))
+            return null;
+
+        var bootstrapBudget = new EventBudget
+        {
+            EventId = eventId,
+            TotalAllocated = 0m,
+            Currency = "INR",
+            CreatedByUserId = createdByUserId,
+            OwnerVendorUserId = owner,
+        };
+
+        try
+        {
+            return await _budgets.CreateAsync(bootstrapBudget, ct);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return await _budgets.FindByEventIdAsync(eventId, ct);
+        }
+    }
 
     private async Task EnsureVenueAllocationForBudgetAsync(EventBudget budget, CancellationToken ct)
     {

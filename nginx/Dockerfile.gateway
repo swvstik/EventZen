@@ -9,4 +9,6 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/swagger/index.html /usr/share/nginx/html/swagger/index.html
+COPY nginx/swagger/eventzen-aggregated.yaml /usr/share/nginx/html/openapi/eventzen-aggregated.yaml
 COPY --from=client-builder /app/client/dist /usr/share/nginx/html
