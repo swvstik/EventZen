@@ -26,6 +26,7 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 ## Table of Contents
 
 - [Quick Setup](#quick-setup)
+- [Required Secrets & API Keys](#required-secrets--api-keys)
 - [Architecture](#architecture)
 - [System Flow](#system-flow)
 - [Database ER Diagrams](#database-er-diagrams)
@@ -145,6 +146,9 @@ Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
 
 Edit `vault-secrets.local.json` with your real values, then load and verify:
 
+> [!WARNING]
+> Signing secrets (`JWT_SECRET`, `INTERNAL_SERVICE_SECRET`, `TOKEN_HASH_SECRET`) **must be strong** — at least 32 bytes / 64 characters. Short secrets will crash Spring Boot on startup. See [Required Secrets & API Keys](#required-secrets--api-keys) for the full key reference, including how to obtain Polar.sh and Gmail SMTP credentials.
+
 ```powershell
 vault kv put -mount=secret eventzen/ez-secrets @vault-secrets.local.json
 vault kv get -mount=secret eventzen/ez-secrets
@@ -204,6 +208,114 @@ Full local reset (**removes DB volumes**):
 ```powershell
 docker compose down -v
 ```
+
+---
+
+## Required Secrets & API Keys
+
+Before starting the stack, you must populate `vault-secrets.local.json` with real values.
+Every key in `vault-secrets.example.json` must be present in Vault — missing or weak values will cause services to crash on startup.
+
+> [!CAUTION]
+> **Strong secrets are mandatory.** The Spring Boot service uses HMAC-SHA256 (`Keys.hmacShaKeyFor`) to verify JWTs. This requires `JWT_SECRET` to be **at least 32 bytes** (256 bits) when encoded as UTF-8. In practice, use a **64-character random string** (or a base64 string of 48+ random bytes) for all signing secrets. Short or weak secrets will cause an immediate startup failure.
+
+### Generating strong secrets
+
+Run one of these commands **three times** to generate separate values for `JWT_SECRET`, `INTERNAL_SERVICE_SECRET`, and `TOKEN_HASH_SECRET`:
+
+**PowerShell (Windows/Linux):**
+```powershell
+[Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+```
+
+**Bash (Linux/Mac):**
+```bash
+openssl rand -base64 48
+```
+
+### Vault secrets reference
+
+| Key | What it is | How to get it |
+|---|---|---|
+| `JWT_SECRET` | Shared HMAC signing key for JWT access tokens. Used by Node.js (issuer), Spring Boot, and .NET (verifiers). | Generate a strong random string (64+ chars). **Must be identical** across all three services. |
+| `JWT__Secret` | Same value as `JWT_SECRET`. .NET configuration binding uses `__` as the section separator. | Copy the exact same value from `JWT_SECRET`. |
+| `INTERNAL_SERVICE_SECRET` | Bearer token for service-to-service internal API calls (Node to Spring, Spring to Node). | Generate a strong random string (64+ chars). |
+| `Spring__InternalSecret` | Same value as `INTERNAL_SERVICE_SECRET`. Used by the .NET service to call Spring internal endpoints. | Copy the exact same value from `INTERNAL_SERVICE_SECRET`. |
+| `Node__InternalSecret` | Same value as `INTERNAL_SERVICE_SECRET`. Used by the .NET service to call Node internal endpoints. | Copy the exact same value from `INTERNAL_SERVICE_SECRET`. |
+| `TOKEN_HASH_SECRET` | HMAC key used by Node.js to hash OTP codes and password-reset tokens before storing them. | Generate a strong random string (64+ chars). |
+
+### External service credentials
+
+<details>
+<summary><b>Gmail SMTP</b> — required for OTP email verification and notifications</summary>
+
+| Key | Value |
+|---|---|
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_USER` | Your Gmail address (e.g. `you@gmail.com`) |
+| `SMTP_PASS` | A 16-character **Google App Password** (not your login password) |
+
+**Setup steps:**
+1. Use (or create) a Gmail account for `SMTP_USER`.
+2. Enable **2-Step Verification** on that Google account.
+3. Go to [App Passwords](https://myaccount.google.com/apppasswords).
+4. Generate a new app password (select "Mail" and your device).
+5. Copy the 16-character password into `SMTP_PASS`.
+
+> [!WARNING]
+> Regular Gmail passwords will not work — Google blocks SMTP login unless you use an App Password with 2FA enabled.
+
+</details>
+
+<details>
+<summary><b>Polar.sh</b> — required for paid ticket checkout and invoices</summary>
+
+| Key | Value |
+|---|---|
+| `POLAR_ACCESS_TOKEN` | A personal/org API access token from Polar |
+| `POLAR_PRODUCT_ID` | The UUID of the product you create in Polar |
+
+**Setup steps:**
+1. Create an account at [polar.sh](https://polar.sh).
+2. Switch to **Sandbox mode** (for development/testing).
+3. Create an **Organization** if you haven't already.
+4. Create a **Product** that represents the EventZen checkout item (e.g. "EventZen Ticket"). Copy its product ID.
+5. Go to **Settings > Developers > Personal Access Tokens**.
+6. Create a new access token with checkout/order permissions. Copy the token.
+7. Set `POLAR_ACCESS_TOKEN` to the token and `POLAR_PRODUCT_ID` to the product UUID.
+
+> [!NOTE]
+> The `.env` file controls `POLAR_SERVER=sandbox` vs `production`. For local development, keep it set to `sandbox`.
+
+</details>
+
+<details>
+<summary><b>Infrastructure passwords</b> — local dev defaults are fine</summary>
+
+| Key | Default | Notes |
+|---|---|---|
+| `SPRING_DATASOURCE_PASSWORD` | — | Must match `MYSQL_ROOT_PASSWORD` in `.env` |
+| `MYSQL_ROOT_PASSWORD` | — | Set in both `.env` and Vault; pick any strong value |
+| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO S3 access key |
+| `MINIO_SECRET_KEY` | `minioadmin` | MinIO S3 secret key |
+| `MINIO_ROOT_USER` | `minioadmin` | Must match `MINIO_ACCESS_KEY` |
+| `MINIO_ROOT_PASSWORD` | `minioadmin` | Must match `MINIO_SECRET_KEY` |
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana dashboard login |
+| `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana dashboard password |
+| `TEST_USER_PASSWORD` | `Eventzen@2026!` | Password for the three seeded test users |
+
+</details>
+
+### Key alignment rules
+
+> [!IMPORTANT]
+> Several secrets must have **identical values** across their mirrored keys:
+> - `JWT_SECRET` = `JWT__Secret`
+> - `INTERNAL_SERVICE_SECRET` = `Spring__InternalSecret` = `Node__InternalSecret`
+> - `SPRING_DATASOURCE_PASSWORD` = `MYSQL_ROOT_PASSWORD` (in `.env`)
+> - `MINIO_ACCESS_KEY` = `MINIO_ROOT_USER`, `MINIO_SECRET_KEY` = `MINIO_ROOT_PASSWORD`
+>
+> Mismatched values will cause authentication failures or database connection errors.
 
 ---
 
