@@ -141,6 +141,14 @@ Use this to remove stale volumes:
 docker compose down -v
 ```
 
+Three demo users are seeded automatically on first startup by the `user-seed` container:
+
+| Email | Role | Password |
+|---|---|---|
+| `admin@ez.local` | ADMIN | `Eventzen@2026!` |
+| `vendor@ez.local` | VENDOR | `Eventzen@2026!` |
+| `user@ez.local` | CUSTOMER | `Eventzen@2026!` |
+
 ---
 
 ## Alternative Setup Paths
