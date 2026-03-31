@@ -324,6 +324,8 @@ function Wait-ForStackReadiness {
             try {
                 $null = Invoke-RestMethod -Method Get -Uri $HealthUrl -TimeoutSec 5
                 Write-Host "[start-local] Stack is ready. Health check passed at $HealthUrl"
+                $healthUri = [Uri]$HealthUrl
+                Write-Host ("[start-local] Open in {0}://{1}" -f $healthUri.Scheme, $healthUri.Authority)
                 return
             } catch {
                 # Continue polling until timeout.
