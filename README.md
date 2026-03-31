@@ -136,6 +136,11 @@ Optional dev-only fallback (not recommended for full feature testing):
 
 Manual setup still works and is fully supported. If you prefer explicit control, use the step-by-step flow below.
 
+Use this to remove stale volumes:
+```powershell
+docker compose down -v
+```
+
 ---
 
 ## Alternative Setup Paths
