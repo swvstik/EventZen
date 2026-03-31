@@ -15,8 +15,6 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Vault](https://img.shields.io/badge/HashiCorp-Vault-FFEC6E?style=for-the-badge&logo=vault&logoColor=black)](https://www.vaultproject.io/)
 
-
-
 </div>
 
 ---
@@ -49,19 +47,19 @@ React · Node.js · Spring Boot · ASP.NET Core · Nginx Gateway
 ## Quick Start
 
 > [!IMPORTANT]
-> **Quick start everything (Vault + secrets + application) without the setup hassle:**
+> **Quick start everything (Vault + secrets + application) without the setup hassle.**
 
 > [!CAUTION]
 > Before running quickstart, keep these values equal to avoid Spring/MySQL startup failures:
-> - `.env` -> `MYSQL_ROOT_PASSWORD`
-> - `vault-secrets.local.json` -> `MYSQL_ROOT_PASSWORD`
-> - `vault-secrets.local.json` -> `SPRING_DATASOURCE_PASSWORD`
+> - `.env` → `MYSQL_ROOT_PASSWORD`
+> - `vault-secrets.local.json` → `MYSQL_ROOT_PASSWORD`
+> - `vault-secrets.local.json` → `SPRING_DATASOURCE_PASSWORD`
 >
 > Also keep mirrored secrets identical:
 > - `JWT_SECRET` = `JWT__Secret`
 > - `INTERNAL_SERVICE_SECRET` = `Spring__InternalSecret` = `Node__InternalSecret`
 
-Before running quickstart, create your local env file first:
+**Step 1 — Create your local env file:**
 
 ```powershell
 Copy-Item .env.example .env
@@ -74,17 +72,50 @@ Then confirm/edit key values in `.env`:
 - `VAULT_KV_PATH=eventzen/ez-secrets`
 - `MYSQL_ROOT_PASSWORD` (must match Vault secrets)
 
-Before running quickstart, create your local secrets file first:
+**Step 2 — Create your local secrets file:**
 
 ```powershell
 Copy-Item .\vault-secrets.example.json .\vault-secrets.local.json
 ```
 
-Then fill your real values (SMTP/Polar/etc.) in `vault-secrets.local.json` and run:
+Then fill your real values (SMTP/Polar/etc.) in `vault-secrets.local.json` — make sure the following secrets match their mirrored keys exactly:
+
+- `MYSQL_ROOT_PASSWORD` (Vault) = `MYSQL_ROOT_PASSWORD` (`.env`)
+- `SPRING_DATASOURCE_PASSWORD` = `MYSQL_ROOT_PASSWORD`
+- `JWT_SECRET` = `JWT__Secret`
+- `INTERNAL_SERVICE_SECRET` = `Spring__InternalSecret` = `Node__InternalSecret`
+- `MINIO_ACCESS_KEY` = `MINIO_ROOT_USER`, `MINIO_SECRET_KEY` = `MINIO_ROOT_PASSWORD`
+
+**Step 3 — Start the stack:**
+
+> [!IMPORTANT]
+> **Run this to start the full EventZen stack:**
+>
+> ```powershell
+> ./scripts/quickstart.ps1 -Detach
+> ```
+
+> [!TIP]
+> **Windows only — if you hit an execution policy error**, run this in the same terminal first, then re-run `quickstart.ps1`:
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> ```
+> This only affects the current terminal session and is safe to use.
+
+---
+
+If your network is unstable while pulling images, use:
 
 ```powershell
-./scripts/quickstart.ps1 -Detach
+./scripts/quickstart.ps1 -Detach -ComposeRetryCount 4 -ComposeRetryDelaySeconds 15
 ```
+
+What `quickstart.ps1` does for convenience:
+
+- Creates `.env` from `.env.example` if missing
+- Starts a local Vault dev container if needed
+- Ensures the `secret/` KV v2 mount exists
+- Runs `start-local.ps1` (uploads local secrets, generates wrapped token, starts compose)
 
 > [!TIP]
 > `quickstart.ps1` auto-resolves busy host ports before compose starts.
@@ -97,19 +128,6 @@ Then fill your real values (SMTP/Polar/etc.) in `vault-secrets.local.json` and r
 > The same remap behavior is available in `start-local.ps1`.
 > If you want strict fixed ports, run quickstart or start-local with `-SkipPortAutoResolve`.
 
-If your network is unstable while pulling images, use:
-
-```powershell
-./scripts/quickstart.ps1 -Detach -ComposeRetryCount 4 -ComposeRetryDelaySeconds 15
-```
-
-What this does for convenience:
-
-- Creates `.env` from `.env.example` if missing
-- Starts a local Vault dev container if needed
-- Ensures the `secret/` KV v2 mount exists
-- Runs `start-local.ps1` (uploads local secrets, generates wrapped token, starts compose)
-
 Optional dev-only fallback (not recommended for full feature testing):
 
 ```powershell
@@ -117,6 +135,8 @@ Optional dev-only fallback (not recommended for full feature testing):
 ```
 
 Manual setup still works and is fully supported. If you prefer explicit control, use the step-by-step flow below.
+
+---
 
 ## Alternative Setup Paths
 
@@ -140,7 +160,6 @@ curl.exe --version (optional)
 > **Install Vault CLI quickly:**
 > Windows: `winget install HashiCorp.Vault`
 > Linux: `sudo apt-get install -y vault` (or see [`GETTING_STARTED.md`](GETTING_STARTED.md) for the full repo setup)
-
 
 ### 2) Create local env file
 
