@@ -400,6 +400,7 @@ openssl rand -base64 48
 
 > [!NOTE]
 > The `.env` file controls `POLAR_SERVER=sandbox` vs `production`. For local development, keep it set to `sandbox`.
+> You can perform test payments using Stripe’s test card numbers: 4242 4242 4242 4242
 
 </details>
 
